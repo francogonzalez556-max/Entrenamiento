@@ -487,3 +487,29 @@ input[type=range] { accent-color: var(--acc); }
 .row-link b { font-family: var(--display); font-weight: 400; font-size: 1.3rem; letter-spacing: .04em; }
 .card.accent .macros div { background: rgba(255, 255, 255, .24); }
 .card.accent .macros span { color: inherit; opacity: .8; font-weight: 600; }
+.fig-cable { stroke: var(--mut); }
+.fig-accl { stroke: var(--acc); }
+
+/* v1.5: asistente de perfilamiento */
+.wz-prog { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; margin: 4px 0 6px; }
+.wz-prog i { height: 5px; border-radius: 3px; background: #26262c; }
+.wz-prog i.on { background: linear-gradient(90deg, var(--acc), var(--acc3)); box-shadow: 0 0 8px -2px var(--acc); }
+.wz h2 { font-size: 2rem; }
+.wz-nav { display: flex; justify-content: space-between; gap: 10px; margin: 6px 0 20px; }
+.wz-nav .btn { flex: 1; padding: 13px; }
+.opts { display: grid; gap: 8px; }
+.opts.two { grid-template-columns: 1fr 1fr; }
+.opt { display: flex; align-items: center; gap: 12px; text-align: left; padding: 12px 14px; border-radius: 12px; border: 1px solid #2c2c33; background: #111114; color: var(--tx); font: inherit; cursor: pointer; }
+.opts.two .opt { flex-direction: column; text-align: center; padding: 16px 10px; }
+.opt.on { border-color: var(--acc); background: color-mix(in srgb, var(--acc) 14%, #111114); box-shadow: 0 0 0 1px var(--acc) inset, 0 0 18px -8px var(--acc); }
+.opt-i { font-size: 1.7rem; }
+.opt-t { display: flex; flex-direction: column; }
+.opt-t b { font-size: 1rem; }
+.opt-t small { color: var(--mut); font-size: .8rem; }
+.opts.compact .opt { padding: 9px 12px; }
+.chips, .chips2 { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 4px; }
+.chip { padding: 9px 13px; border-radius: 999px; border: 1px solid #2c2c33; background: #111114; color: var(--tx); font: inherit; font-size: .9rem; font-weight: 600; cursor: pointer; }
+.chip.on { background: linear-gradient(135deg, var(--acc), var(--acc3)); color: var(--on-acc); border-color: transparent; }
+.chips.days .chip { min-width: 54px; text-align: center; font-family: var(--display); font-weight: 400; font-size: 1.15rem; letter-spacing: .05em; }
+.lbl { display: block; font-size: .85rem; color: var(--mut); margin-bottom: 4px; }
+.row-link.nuevo { border-color: var(--acc); box-shadow: 0 0 20px -10px var(--acc); }

@@ -2,7 +2,6 @@
    App de entrenamiento — lógica principal
    ============================================================ */
 const KEY = 'entreno_v1';
-const DOW_SID = { 2: 'A', 3: 'B', 4: 'C', 5: 'D' };
 const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -15,6 +14,21 @@ function load() {
   return { perfil: null, logs: {}, pesos: [], caminatas: [], comidas: {}, propios: [], rutinas: [], ejPropios: [] };
 }
 let S = load();
+// Perfiles creados antes del perfilamiento (v1) corresponden al plan original: se completan con esos valores
+function migrarPerfil() {
+  const p = S.perfil;
+  if (!p || p.v >= 2) return;
+  Object.assign(p, { v: 2, nombre: p.nombre || '', objetivo: 'bajar', actividad: 'ligero', nivel: 'intermedio_bajo', lugar: 'casa', equipo: ['mancuernas', 'barra', 'eliptica'], mancMax: 30, dias: [2, 3, 4, 5], dur: 45, limit: ['rodillas'], revisar: true });
+  try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* sin almacenamiento */ }
+}
+migrarPerfil();
+let _plan = null, _planKey = '';
+function PLAN() {
+  const p = S.perfil || {};
+  const k = JSON.stringify([p.objetivo, p.dias, p.lugar, p.equipo, p.nivel, p.dur, p.limit]);
+  if (k !== _planKey) { _plan = generarPlan(p); _planKey = k; }
+  return _plan;
+}
 let saveT;
 function save(now) {
   clearTimeout(saveT);
@@ -82,17 +96,30 @@ function fcZonas() {
   const max = Math.round(208 - 0.7 * S.perfil.edad);
   return { max, z2: [Math.round(max * 0.6), Math.round(max * 0.7)], fuerte: [Math.round(max * 0.8), Math.round(max * 0.88)] };
 }
-function objetivos() {
-  const p = S.perfil, kg = pesoActual();
+function objetivos(p = S.perfil, kg = pesoActual()) {
   const bmr = 10 * kg + 6.25 * p.estatura - 5 * p.edad + (p.sexo === 'M' ? 5 : -161);
-  const tdee = bmr * 1.4;
-  const kcal = Math.max(Math.round((tdee * 0.8) / 50) * 50, p.sexo === 'M' ? 1800 : 1400);
-  const meta = (p.metaMin + p.metaMax) / 2;
-  const prot = Math.round((meta * 1.8) / 5) * 5;
-  const grasa = Math.round((meta * 0.7) / 5) * 5;
-  const carb = Math.round((kcal - prot * 4 - grasa * 9) / 4 / 5) * 5;
-  return { kg, bmr: Math.round(bmr), tdee: Math.round(tdee / 10) * 10, kcal, prot, grasa, carb, agua: Math.min(3.5, r1(kg * 0.03)) };
+  const act = { sedentario: 1.25, ligero: 1.4, activo: 1.55, muy: 1.7 }[p.actividad] || 1.4;
+  const tdee = bmr * act;
+  const m2 = Math.pow(p.estatura / 100, 2), imc = kg / m2;
+  const menor = p.edad < 18;
+  let adj = { bajar: imc < 22 ? -0.1 : -0.2, musculo: 0.1, tonificar: 0, cardio: imc > 25 ? -0.1 : 0, salud: imc > 25 ? -0.1 : 0 }[p.objetivo] ?? -0.2;
+  if (menor) adj = Math.max(0, adj);
+  const kcal = Math.max(Math.round((tdee * (1 + adj)) / 50) * 50, menor ? Math.round(tdee / 50) * 50 : p.sexo === 'M' ? 1800 : 1400);
+  const meta = p.metaMin && p.metaMax ? (p.metaMin + p.metaMax) / 2 : null;
+  // peso de referencia para proteína: la meta al bajar, o un peso razonable si hay sobrepeso
+  const ref = p.objetivo === 'bajar' && meta ? meta : Math.min(kg, 27.5 * m2);
+  const pf = menor ? 1.3 : { musculo: 2.0, bajar: 1.8 }[p.objetivo] || 1.6;
+  const prot = Math.round((ref * pf) / 5) * 5;
+  const grasa = Math.round(Math.max(ref * 0.7, (kcal * 0.25) / 9) / 5) * 5;
+  const carb = Math.max(0, Math.round((kcal - prot * 4 - grasa * 9) / 4 / 5) * 5);
+  return { kg, bmr: Math.round(bmr), tdee: Math.round(tdee / 10) * 10, kcal, prot, grasa, carb, agua: Math.min(3.5, r1(kg * 0.03)), adj, menor };
 }
+const textoMeta = (o) => (o.menor
+  ? 'Como eres menor de 18, tu meta es de mantención (sin déficit): en crecimiento lo importante es comer bien y moverse.'
+  : o.adj < 0 ? `Tu meta tiene un déficit de ~${Math.round(-o.adj * 100)}% para bajar de forma sostenible (0,5–0,8 kg por semana).`
+    : o.adj > 0 ? 'Tu meta tiene un superávit de ~10% para ganar músculo sin acumular mucha grasa.'
+      : 'Tu meta es de mantención: comer lo mismo que gastas.') + ' Se recalcula sola con tu último peso.';
+const tieneLimit = (x) => (S.perfil?.limit || []).includes(x);
 
 /* ---------- Caminatas ---------- */
 const sumar = (arr, k) => arr.reduce((a, c) => a + (num(c[k]) || 0), 0);
@@ -117,7 +144,8 @@ function getEj(id) {
 }
 const getRutina = (sid) => (sid && sid.startsWith('R-') ? S.rutinas.find((r) => 'R-' + r.id === sid) : null);
 function getSes(sid) {
-  if (SESIONES[sid]) return SESIONES[sid];
+  const ps = S.perfil && PLAN().ses[sid];
+  if (ps) return ps;
   const r = getRutina(sid);
   return r ? { nombre: r.nombre, foco: 'Rutina personalizada', dur: '', rutina: r } : null;
 }
@@ -133,15 +161,15 @@ function itemsDe(sid, wi) {
       const reps = String(e.reps || '10').trim();
       out.push({ k: 'ex', id: e.id, sets: Math.max(1, num(e.sets) || 3), reps: esTiempo(getEj(e.id)) && /^\d+(\s*-\s*\d+)?$/.test(reps) ? reps + ' s' : reps, rest: num(e.rest) || 60 });
     }
-    if (num(rut.cardio)) out.push({ k: 'cardio', key: 'libre', rx: { titulo: `Elíptica · ${num(rut.cardio)} min`, min: num(rut.cardio), detalle: 'Ritmo a elección (zona 2 recomendada).', zona: 'z2' } });
+    if (num(rut.cardio)) out.push({ k: 'cardio', key: 'libre', rx: { titulo: `${PLAN().cardio.label} · ${num(rut.cardio)} min`, min: num(rut.cardio), detalle: 'Ritmo a elección (zona 2 recomendada).', zona: 'z2' } });
     return out;
   }
-  for (const b of SESIONES[sid].bloques) {
+  for (const b of PLAN().ses[sid].bloques) {
     if (b.tipo === 'calentamiento') out.push({ k: 'warm', corto: !!b.corto });
     else if (b.tipo === 'ej') {
       const r = b.rx[wi.phase - 1];
       if (r) out.push({ k: 'ex', id: b.id, sets: wi.deload ? Math.max(2, r[0] - 1) : r[0], reps: r[1], rest: r[2] });
-    } else if (b.tipo === 'cardio') out.push({ k: 'cardio', key: b.kind, rx: cardioRx(b.kind, wi.wk) });
+    } else if (b.tipo === 'cardio') out.push({ k: 'cardio', key: b.kind, rx: cardioRx(b.kind, wi.wk, PLAN().cardio, PLAN().cardioF) });
     else if (b.tipo === 'circuito') {
       const i = wi.phase - 1;
       const rondas = wi.deload ? b.rondas[i] - 1 : b.rondas[i];
@@ -299,42 +327,110 @@ function header(title, back) {
   return `<header class="top">${back ? `<a href="${back}" class="back" aria-label="Volver">‹</a>` : ''}<h1>${title}</h1></header>`;
 }
 
-/* ---- Onboarding / perfil ---- */
-function vPerfil(first) {
+/* ---- Perfilamiento (asistente) ---- */
+let wz = null, wzPaso = 0;
+const WZ_PASOS = ['Tus datos', 'Objetivo', 'Dónde', 'Tiempo', 'Cuidados', 'Tu plan'];
+function wzInit() {
   const p = S.perfil || {};
-  let inicio = p.inicio;
-  if (!inicio) {
-    const d = new Date();
-    const add = (2 - d.getDay() + 7) % 7; // próximo martes (o hoy si es martes)
-    inicio = iso(add > 3 ? d : addDays(d, add));
+  wz = {
+    nombre: p.nombre || '', edad: p.edad ?? '', sexo: p.sexo || 'M', estatura: p.estatura ?? '', peso: S.perfil ? pesoActual() : '',
+    metaMin: p.metaMin ?? '', metaMax: p.metaMax ?? '', objetivo: p.objetivo || '', actividad: p.actividad || 'ligero',
+    nivel: p.nivel || '', lugar: p.lugar || '', equipo: [...(p.equipo || [])], mancMax: p.mancMax ?? '',
+    dias: [...(p.dias || [])], dur: p.dur || 45, limit: [...(p.limit || [])], inicio: p.inicio || today(),
+  };
+  wzPaso = 0;
+}
+function perfilDesdeWz() {
+  const w = wz, old = S.perfil || {};
+  const m1 = num(w.metaMin), m2 = num(w.metaMax);
+  const conMeta = ['bajar', 'musculo'].includes(w.objetivo) && m1 && m2;
+  return {
+    v: 2, nombre: String(w.nombre || '').trim(), edad: num(w.edad), sexo: w.sexo, estatura: num(w.estatura),
+    peso: old.peso ?? num(w.peso), metaMin: conMeta ? Math.min(m1, m2) : null, metaMax: conMeta ? Math.max(m1, m2) : null,
+    objetivo: w.objetivo, actividad: w.actividad, nivel: w.nivel, lugar: w.lugar,
+    equipo: w.lugar === 'casa' ? w.equipo : [], mancMax: num(w.mancMax),
+    dias: [...w.dias].sort((x, y) => ((x + 6) % 7) - ((y + 6) % 7)), dur: w.dur, limit: w.limit, inicio: w.inicio || today(),
+  };
+}
+function wzValidar() {
+  const w = wz;
+  if (wzPaso === 0) {
+    if (!(num(w.edad) >= 10 && num(w.edad) <= 99)) return 'Ingresa tu edad';
+    if (!(num(w.estatura) >= 120 && num(w.estatura) <= 230)) return 'Ingresa tu estatura en cm (ej: 175)';
+    if (!(num(w.peso) >= 30 && num(w.peso) <= 300)) return 'Ingresa tu peso en kg';
   }
-  return `${first ? '' : header('Mi perfil', '#/mas')}
-  <section class="wrap">
-    ${first ? `<div class="hero"><div class="hero-ico">💪</div><h1>Tu plan de entrenamiento</h1><p>Completa tus datos para calcular calorías, zonas de pulso y armar tu calendario. Todo queda guardado solo en este teléfono.</p></div>` : ''}
-    <form id="fperfil" class="card form">
-      <div class="row2">
-        <label>Edad<input name="edad" type="number" inputmode="numeric" required min="14" max="99" value="${p.edad ?? ''}"></label>
-        <label>Sexo<select name="sexo"><option value="M" ${p.sexo !== 'F' ? 'selected' : ''}>Hombre</option><option value="F" ${p.sexo === 'F' ? 'selected' : ''}>Mujer</option></select></label>
-      </div>
-      <div class="row2">
-        <label>Estatura (cm)<input name="estatura" type="number" inputmode="numeric" required min="120" max="230" value="${p.estatura ?? ''}"></label>
-        <label>Peso inicial (kg)<input name="peso" type="text" inputmode="decimal" required min="35" max="300" value="${p.peso ?? ''}"></label>
-      </div>
-      <div class="row2">
-        <label>Meta desde (kg)<input name="metaMin" type="text" inputmode="decimal" required value="${p.metaMin ?? ''}"></label>
-        <label>Meta hasta (kg)<input name="metaMax" type="text" inputmode="decimal" required value="${p.metaMax ?? ''}"></label>
-      </div>
-      <label>Fecha de inicio del plan<input name="inicio" type="date" required value="${inicio}"></label>
-      <p class="muted small">La semana 1 empieza el lunes de la semana de inicio. Entrenas martes, miércoles, jueves y viernes.</p>
-      <button class="btn primary big" type="submit">${first ? 'Crear mi plan' : 'Guardar'}</button>
-    </form>
+  if (wzPaso === 1 && !w.objetivo) return 'Elige tu objetivo';
+  if (wzPaso === 2 && !w.lugar) return 'Elige dónde entrenas';
+  if (wzPaso === 3) {
+    if (!w.nivel) return 'Elige tu nivel';
+    if (w.dias.length < 2 || w.dias.length > 6) return 'Elige entre 2 y 6 días';
+  }
+  return null;
+}
+function vWizard(first) {
+  if (!wz) wzInit();
+  const w = wz, paso = wzPaso;
+  const chip = (f, v, label, multi) => {
+    const on = multi ? w[f].includes(v) : w[f] === v;
+    return `<button type="button" class="chip ${on ? 'on' : ''}" data-act="wzset" data-f="${f}" data-v="${v}"${multi ? ' data-multi="1"' : ''}>${label}</button>`;
+  };
+  const card = (f, v, ico, t, d) => `<button type="button" class="opt ${w[f] === v ? 'on' : ''}" data-act="wzset" data-f="${f}" data-v="${v}">${ico ? `<span class="opt-i">${ico}</span>` : ''}<span class="opt-t"><b>${t}</b><small>${d}</small></span></button>`;
+  const inp = (f, label, mode = 'decimal', ph = '') => `<label>${label}<input data-wz="${f}" type="text" inputmode="${mode}" value="${esc(w[f])}" placeholder="${ph}"></label>`;
+  let body = '';
+  if (paso === 0) {
+    body = `<h2>¿Quién eres?</h2><p class="muted small">Con esto calculamos tus calorías y zonas de pulso. Todo queda solo en este teléfono.</p>
+      <label>Nombre (opcional)<input data-wz="nombre" value="${esc(w.nombre)}" placeholder="¿Cómo te llamas?"></label>
+      <div class="row2">${inp('edad', 'Edad', 'numeric')}<div><span class="lbl">Sexo</span><div class="chips2">${chip('sexo', 'M', 'Hombre')}${chip('sexo', 'F', 'Mujer')}</div></div></div>
+      <div class="row2">${inp('estatura', 'Estatura (cm)', 'numeric', 'ej: 175')}${inp('peso', 'Peso actual (kg)', 'decimal', 'ej: 80,5')}</div>`;
+  } else if (paso === 1) {
+    body = `<h2>¿Qué quieres lograr?</h2><div class="opts">${PERFIL_OPC.objetivos.map((o) => card('objetivo', ...o)).join('')}</div>
+      ${['bajar', 'musculo'].includes(w.objetivo) ? `<h3 class="mt">Peso meta (opcional)</h3><div class="row2">${inp('metaMin', 'Desde (kg)')}${inp('metaMax', 'Hasta (kg)')}</div>` : ''}
+      <h3 class="mt">Tu día a día (sin contar el entrenamiento)</h3><div class="opts compact">${PERFIL_OPC.actividad.map((o) => card('actividad', o[0], '', o[1], o[2])).join('')}</div>`;
+  } else if (paso === 2) {
+    body = `<h2>¿Dónde entrenas?</h2><div class="opts two">${card('lugar', 'casa', '🏠', 'En casa', 'Con lo que tengas')}${card('lugar', 'gimnasio', '🏋️', 'Gimnasio', 'Máquinas, poleas y pesas')}</div>
+      ${w.lugar === 'casa' ? `<h3 class="mt">¿Qué tienes en casa?</h3><p class="small muted">Marca todo lo que tengas. Si no tienes nada, igual armamos tu plan con peso corporal.</p>
+        <div class="chips">${PERFIL_OPC.equipo.map(([v, i, l]) => chip('equipo', v, `${i} ${l}`, true)).join('')}</div>
+        ${w.equipo.includes('mancuernas') ? inp('mancMax', 'Peso máximo de tus mancuernas (kg cada una)', 'decimal', 'ej: 20') : ''}` : ''}
+      ${w.lugar === 'gimnasio' ? '<p class="small muted mt">Usaremos máquinas, poleas, barras, mancuernas y las máquinas de cardio del gimnasio.</p>' : ''}`;
+  } else if (paso === 3) {
+    body = `<h2>Tu nivel y tu tiempo</h2><div class="opts compact">${PERFIL_OPC.niveles.map((o) => card('nivel', o[0], '', o[1], o[2])).join('')}</div>
+      <h3 class="mt">¿Qué días vas a entrenar?</h3><p class="small muted">Elige entre 2 y 6 días (${w.dias.length} elegidos).</p>
+      <div class="chips days">${[1, 2, 3, 4, 5, 6, 0].map((d) => chip('dias', d, DIAS[d].slice(0, 3), true)).join('')}</div>
+      <h3 class="mt">Minutos por sesión</h3><div class="chips2">${[[30, '30 min'], [45, '45 min'], [60, '60 min']].map(([v, l]) => chip('dur', v, l)).join('')}</div>`;
+  } else if (paso === 4) {
+    body = `<h2>Cuidados</h2><p class="small muted">¿Tienes molestias o lesiones? Evitaremos los ejercicios que las empeoran y sumaremos los que ayudan.</p>
+      <div class="chips">${PERFIL_OPC.limitaciones.map(([v, l]) => chip('limit', v, l, true)).join('')}<button type="button" class="chip ${w.limit.length ? '' : 'on'}" data-act="wzset" data-f="limit" data-v="__none">✅ Ninguna</button></div>
+      <label class="mt">Fecha de inicio del plan<input data-wz="inicio" type="date" value="${esc(w.inicio)}"></label>
+      ${num(w.edad) < 18 ? '<div class="infobanner mt">Como eres menor de 18, la app no aplicará déficit de calorías: en crecimiento lo importante es comer bien y moverse. Ante dudas, consulta a un médico o nutricionista.</div>' : ''}
+      <p class="small muted">Si tienes alguna condición médica (corazón, presión, diabetes), consulta a tu médico antes de empezar.</p>`;
+  } else {
+    const tp = perfilDesdeWz(), pl = generarPlan(tp), o = objetivos(tp, num(w.peso));
+    const obj = PERFIL_OPC.objetivos.find((x) => x[0] === tp.objetivo);
+    body = `<h2>Tu plan está listo</h2>
+      <div class="card accent"><div class="tag">${obj[1]} ${obj[2]}</div><h3>${pl.orden.length} días · ${tp.dur} min</h3>
+        <p class="small">${tp.lugar === 'gimnasio' ? 'En el gimnasio' : 'En casa'} · cardio en ${pl.cardio.label.toLowerCase()}</p>
+        <div class="macros macros3"><div><b>${o.kcal.toLocaleString('es-CL')}</b><span>kcal/día</span></div><div><b>${o.prot} g</b><span>proteína</span></div><div><b>${o.agua} L</b><span>agua</span></div></div></div>
+      <div class="card pweek">${pl.orden.map((sid) => {
+        const se = pl.ses[sid], n = se.bloques.reduce((a, b) => a + (b.tipo === 'ej' ? 1 : b.tipo === 'circuito' ? b.ejercicios.filter((e) => e.fases.includes(1)).length : 0), 0);
+        return `<div class="pday"><div class="pd"><b>${DIAS[se.dow].slice(0, 3)}</b></div><div class="grow"><b>${se.nombre}</b><span class="small muted">${se.foco} · ${n} ejercicios</span></div></div>`;
+      }).join('')}</div>
+      <p class="small muted">${textoMeta(o)}</p>
+      ${S.perfil ? '<p class="small muted">Tu historial se mantiene. Si cambian las sesiones, las nuevas partirán desde la próxima vez que entrenes.</p>' : ''}`;
+  }
+  const prog = WZ_PASOS.map((n, i) => `<i class="${i <= paso ? 'on' : ''}"></i>`).join('');
+  return `${first ? '' : header('Mi perfil y objetivos', '#/mas')}<section class="wrap wz">
+    ${first && paso === 0 ? '<div class="hero"><div class="hero-ico">💪</div><h1>Armemos tu plan</h1><p>6 pasos rápidos para crear un plan a tu medida.</p></div>' : ''}
+    <div class="wz-prog">${prog}</div><p class="small muted center">Paso ${paso + 1} de ${WZ_PASOS.length} · ${WZ_PASOS[paso]}</p>
+    <div class="card form">${body}</div>
+    <div class="wz-nav">${paso > 0 ? '<button class="btn" data-act="wzback">‹ Atrás</button>' : '<span></span>'}
+      ${paso < WZ_PASOS.length - 1 ? '<button class="btn primary" data-act="wznext">Siguiente ›</button>' : `<button class="btn primary" data-act="wzsave">${first ? 'Crear mi plan 🔥' : 'Guardar cambios'}</button>`}</div>
   </section>`;
 }
 
 /* ---- HOY ---- */
 function vHoy() {
   const t = today(), wi = weekInfo(t), dow = new Date().getDay();
-  const sid = DOW_SID[dow];
+  const PL = PLAN(), sid = PL.dowSid[dow];
   const fz = fcZonas();
   const kg = pesoActual(), p = S.perfil;
   const perd = r1(p.peso - kg);
@@ -351,7 +447,7 @@ function vHoy() {
   if (wi.antes) {
     main = `<div class="card accent"><h2>Tu plan empieza el ${fmt(p.inicio, true)}</h2><p>Mientras tanto: camina 20-30 min en plano y revisa la técnica de los ejercicios en <a href="#/mas">Más → Ejercicios</a>.</p></div>`;
   } else if (sid) {
-    const ses = SESIONES[sid], lg = getLog(t, sid);
+    const ses = PL.ses[sid], lg = getLog(t, sid);
     const st = lg?.done ? 'done' : lg ? 'prog' : 'new';
     main = `<div class="card today ${st}">
       <div class="tag">${st === 'done' ? '✓ Completada' : st === 'prog' ? 'En curso' : 'Hoy toca'}</div>
@@ -359,26 +455,27 @@ function vHoy() {
       <a class="btn primary big" href="#/sesion/${t}/${sid}">${st === 'done' ? 'Ver sesión' : st === 'prog' ? 'Continuar' : 'Empezar entrenamiento'}</a>
     </div>`;
   } else {
-    const next = [2, 3, 4, 5].map((d) => (d - dow + 7) % 7 || 7).sort((a, b) => a - b)[0];
+    const next = PL.dias.map((d) => (d - dow + 7) % 7 || 7).sort((a, b) => a - b)[0];
     const nd = addDays(new Date(), next);
     main = `<div class="card rest"><div class="tag">Descanso</div><h2>Hoy recuperas 😌</h2>
       <p>El músculo se construye descansando. Opcional: <b>caminata de 20-40 min en plano</b> o movilidad suave.</p>
-      <p class="muted">Próxima sesión: <b>${DIAS[nd.getDay()]}</b> · ${SESIONES[DOW_SID[nd.getDay()]].nombre}</p></div>`;
+      <p class="muted">Próxima sesión: <b>${DIAS[nd.getDay()]}</b> · ${PL.ses[PL.dowSid[nd.getDay()]].nombre}</p></div>`;
   }
 
-  const dots = ['A', 'B', 'C', 'D'].map((s) => {
-    const d = dateOf(semana, SESIONES[s].dow);
+  const dots = PL.orden.map((s) => {
+    const d = dateOf(semana, PL.ses[s].dow);
     const ok = doneEnSemana(semana, s);
-    return `<a class="wd ${ok ? 'ok' : ''} ${d === t ? 'now' : ''}" href="#/sesion/${d <= t ? t : d}/${s}"><b>${DIAS[SESIONES[s].dow].slice(0, 3)}</b><span>${ok ? '✓' : SESIONES[s].nombre.split(' ')[0]}</span></a>`;
+    return `<a class="wd ${ok ? 'ok' : ''} ${d === t ? 'now' : ''}" href="#/sesion/${d <= t ? t : d}/${s}"><b>${DIAS[PL.ses[s].dow].slice(0, 3)}</b><span>${ok ? '✓' : PL.ses[s].nombre.split(' ')[0]}</span></a>`;
   }).join('');
 
-  return `${header('¡A darle! 🔥')}
+  return `${header(p.nombre ? `¡A darle, ${esc(p.nombre.split(' ')[0])}! 🔥` : '¡A darle! 🔥')}
   <section class="wrap">
     <div class="weekline"><span class="pill">Semana ${wi.antes ? 0 : wi.wk}${wi.ciclo > 1 ? ` · ciclo ${wi.ciclo}` : ''} de 12</span><span class="pill soft">Fase ${wi.phase}: ${FASES[wi.phase - 1].nombre}</span>${wi.deload ? '<span class="pill warn">Semana de descarga</span>' : ''}</div>
+    ${p.revisar ? '<a class="card row-link nuevo" href="#/perfil"><span>✨</span><div class="grow"><b>Nuevo: personaliza tu plan</b><span class="small muted">Objetivo, dónde entrenas, equipo y días. Si no cambias nada, tu plan sigue igual.</span></div>›</a>' : ''}
     ${main}
-    <div class="card"><h3>Esta semana</h3><div class="weekdots">${dots}</div>
+    <div class="card"><h3>Esta semana</h3><div class="weekdots" style="grid-template-columns:repeat(${PL.orden.length},1fr)">${dots}</div>
       <p class="muted small">¿Te saltaste una? Tócala para hacerla hoy.</p></div>
-    ${S.rutinas.length ? `<div class="card"><h3>🧩 Mis rutinas</h3>${S.rutinas.map((r) => `<a class="rrow" href="#/sesion/${t}/R-${r.id}"><div class="grow"><b>${esc(r.nombre)}</b><span class="small muted">${r.ejercicios.length} ejercicios${num(r.cardio) ? ` · elíptica ${num(r.cardio)} min` : ''}${getLog(t, 'R-' + r.id)?.done ? ' · ✓ hecha hoy' : ''}</span></div><span class="btn small-btn">Empezar</span></a>`).join('')}</div>` : ''}
+    ${S.rutinas.length ? `<div class="card"><h3>🧩 Mis rutinas</h3>${S.rutinas.map((r) => `<a class="rrow" href="#/sesion/${t}/R-${r.id}"><div class="grow"><b>${esc(r.nombre)}</b><span class="small muted">${r.ejercicios.length} ejercicios${num(r.cardio) ? ` · cardio ${num(r.cardio)} min` : ''}${getLog(t, 'R-' + r.id)?.done ? ' · ✓ hecha hoy' : ''}</span></div><span class="btn small-btn">Empezar</span></a>`).join('')}</div>` : ''}
     ${pedirResp ? `<div class="card warnc"><b>💾 Respalda tus datos</b><p class="small">${diasResp === null ? 'Aún no has exportado un respaldo.' : `Tu último respaldo fue hace ${diasResp} días.`} Guárdalo en iCloud o WhatsApp por si cambias o pierdes el teléfono.</p><button class="btn small-btn" data-act="export">Exportar ahora</button></div>` : ''}
     <div class="card"><h3>🚶 Caminata</h3>
       ${camHoy.length ? `<p class="small good"><b>Hoy:</b> ${resumenCam(camHoy)}</p>` : ''}
@@ -392,7 +489,7 @@ function vHoy() {
       <div><b>${totalDone}</b><span>sesiones</span></div>
     </div>
     <div class="card small-card"><h3>❤️ Tus zonas de pulso</h3>
-      <p><b>Zona 2 (suave):</b> ${fz.z2[0]}–${fz.z2[1]} lpm · puedes hablar en frases.<br><b>Fuerte (intervalos):</b> ${fz.fuerte[0]}–${fz.fuerte[1]} lpm · hablar cuesta.<br><span class="muted small">FC máx. estimada: ${fz.max} lpm. Si la elíptica no mide pulso, guíate por la conversación.</span></p></div>
+      <p><b>Zona 2 (suave):</b> ${fz.z2[0]}–${fz.z2[1]} lpm · puedes hablar en frases.<br><b>Fuerte (intervalos):</b> ${fz.fuerte[0]}–${fz.fuerte[1]} lpm · hablar cuesta.<br><span class="muted small">FC máx. estimada: ${fz.max} lpm. Si tu máquina o reloj no mide pulso, guíate por la conversación.</span></p></div>
   </section>`;
 }
 
@@ -410,7 +507,7 @@ function vSesion(date, sid) {
 
   for (const it of items) {
     if (it.k === 'warm') {
-      const list = CALENTAMIENTO[it.corto ? 'corto' : 'normal'];
+      const list = CALENTAMIENTO[it.corto ? 'corto' : 'normal'].map((x) => x.replace('cardio', PLAN().cardio.label.toLowerCase()));
       html += `<div class="card blk ${lg?.warm ? 'done' : ''}" id="warm"><div class="blk-h"><h3>🔥 Calentamiento</h3><button class="chk ${lg?.warm ? 'on' : ''}" data-act="warm" aria-label="Marcar calentamiento">✓</button></div><ul class="ticks">${list.map((x) => `<li>${x}</li>`).join('')}</ul></div>`;
     } else if (it.k === 'circ') {
       html += `<div class="card circ"><h3>⚡ Circuito · ${it.rondas} rondas</h3><p>Haz los ejercicios <b>seguidos</b>: ${it.trabajo} de trabajo y ${it.pausa} s de pausa entre ejercicios. Descansa <b>${it.entre} s</b> al terminar cada ronda. Anota el peso y las reps (o segundos) que lograste en cada ronda.</p></div>`;
@@ -418,7 +515,7 @@ function vSesion(date, sid) {
       const c = lg?.cardio?.[it.key] || {};
       const zona = it.rx.zona === 'int' ? `Suave: ${fz.z2[0]}–${fz.z2[1]} lpm · Fuerte: ${fz.fuerte[0]}–${fz.fuerte[1]} lpm` : `Zona 2: ${fz.z2[0]}–${fz.z2[1]} lpm`;
       html += `<div class="card blk cardio ${c.ok ? 'done' : ''}" data-ck="${it.key}">
-        <div class="blk-h"><div class="thumb" data-act="tech" data-id="eliptica">${Fig.still(ANIMS.eliptica, 0)}</div><div class="grow"><h3>${it.rx.titulo}</h3><p class="small">${it.rx.detalle}</p><p class="small zona">${zona}</p></div>
+        <div class="blk-h"><div class="thumb" data-act="tech" data-id="${PLAN().cardio.ex}">${Fig.still(ANIMS[PLAN().cardio.anim], 0)}</div><div class="grow"><h3>${it.rx.titulo}</h3><p class="small">${it.rx.detalle}</p><p class="small zona">${zona}</p></div>
         <button class="chk ${c.ok ? 'on' : ''}" data-act="cardiook" data-key="${it.key}" aria-label="Marcar cardio">✓</button></div>
         <div class="tech" id="tech-eliptica-${it.key}"></div>
         <div class="cgrid">
@@ -465,7 +562,7 @@ function vSesion(date, sid) {
   html += `<div class="card fin">
     <h3>Cierre de la sesión</h3>
     <label>¿Qué tan duro fue? <b id="rpeV">${lg?.rpe ?? 6} · ${rpeTxt[lg?.rpe ?? 6]}</b><input type="range" min="1" max="10" data-fin="rpe" value="${lg?.rpe ?? 6}"></label>
-    <label>Dolor de rodilla (0 = nada, 10 = máximo) <b id="rodV">${lg?.rodilla ?? 0}</b><input type="range" min="0" max="10" data-fin="rodilla" value="${lg?.rodilla ?? 0}"></label>
+    <label>${tieneLimit('rodillas') ? 'Dolor de rodilla' : 'Dolor o molestia articular'} (0 = nada, 10 = máximo) <b id="rodV">${lg?.rodilla ?? 0}</b><input type="range" min="0" max="10" data-fin="rodilla" value="${lg?.rodilla ?? 0}"></label>
     <p class="small muted">Regla: hasta 3/10 durante el ejercicio es aceptable si al día siguiente no está peor. Si pasa de 3, reduce rango o peso.</p>
     <label>Notas<textarea data-fin="notas" rows="2" placeholder="¿Cómo te sentiste? ¿Algo molestó?">${esc(lg?.notas || '')}</textarea></label>
     <button class="btn primary big" data-act="finish">${lg?.done ? 'Guardar cambios' : 'Terminar sesión ✓'}</button>
@@ -481,11 +578,11 @@ function vPlan() {
   const wi = weekInfo(dateOf(week, 1));
   const fases = FASES.map((f) => `<div class="fase ${f.n === wi.phase ? 'on' : ''}"><b>Fase ${f.n} · ${f.nombre}</b><span class="muted small">Semanas ${f.semanas}</span><p class="small">${f.desc}</p></div>`).join('');
   const dias = [1, 2, 3, 4, 5, 6, 0].map((dow) => {
-    const d = dateOf(week, dow), sid = DOW_SID[dow];
+    const d = dateOf(week, dow), sid = PLAN().dowSid[dow];
     if (!sid) {
-      return `<div class="pday rest ${d === t ? 'now' : ''}"><div class="pd"><b>${DIAS[dow].slice(0, 3)}</b><span>${fmt(d)}</span></div><div class="grow muted small">${dow === 1 ? 'Descanso total' : 'Descanso activo: caminata 20-40 min en plano (regístrala en Hoy)'}</div></div>`;
+      return `<div class="pday rest ${d === t ? 'now' : ''}"><div class="pd"><b>${DIAS[dow].slice(0, 3)}</b><span>${fmt(d)}</span></div><div class="grow muted small">Descanso · opcional: caminata 20-40 min (regístrala en Hoy)</div></div>`;
     }
-    const ses = SESIONES[sid], ok = doneEnSemana(week, sid);
+    const ses = PLAN().ses[sid], ok = doneEnSemana(week, sid);
     const its = itemsDe(sid, wi);
     const cardio = its.filter((x) => x.k === 'cardio').map((x) => x.rx.titulo).join(' + ');
     const nEj = its.filter((x) => x.k === 'ex').length;
@@ -498,7 +595,7 @@ function vPlan() {
     <div class="card pweek">${dias}</div>
     <h2 class="sec">Las 3 fases</h2>${fases}
     <a class="card row-link" href="#/rutinas"><span>🧩</span><div class="grow"><b>Rutinas personalizadas</b><span class="small muted">Crea las tuyas y hazlas cualquier día</span></div>›</a>
-    <div class="card small-card"><h3>Cómo progresar</h3><p class="small">Usa <b>doble progresión</b>: cuando completes todas las series en el máximo del rango (ej. 3×15), sube el peso en la próxima sesión y vuelve al mínimo del rango. La app te avisa con ⬆️. En la elíptica, los minutos suben automáticamente cada semana.</p></div>
+    <div class="card small-card"><h3>Cómo progresar</h3><p class="small">Usa <b>doble progresión</b>: cuando completes todas las series en el máximo del rango (ej. 3×15), sube el peso en la próxima sesión y vuelve al mínimo del rango. La app te avisa con ⬆️. En el cardio, los minutos suben automáticamente cada semana.</p></div>
   </section>`;
 }
 
@@ -508,7 +605,9 @@ function vProgreso() {
   const pesos = [...S.pesos].sort((a, b) => a.fecha.localeCompare(b.fecha));
   const kg = pesoActual();
   const perd = r1(p.peso - kg);
-  const faltan = r1(kg - p.metaMax);
+  const tieneMeta = p.metaMin && p.metaMax;
+  const faltan = !tieneMeta ? null : kg > p.metaMax ? r1(kg - p.metaMax) : kg < p.metaMin ? r1(p.metaMin - kg) : 0;
+  const PL = PLAN();
   const imc = r1(kg / Math.pow(p.estatura / 100, 2));
   let ritmo = '';
   const rec = pesos.filter((x) => dayDiff(x.fecha, t) <= 35);
@@ -532,7 +631,7 @@ function vProgreso() {
   }
   let grid = '';
   for (let w = Math.max(1, cur - 11); w <= cur; w++) {
-    grid += `<div class="grow-row"><span class="small muted">S${((w - 1) % 12) + 1}</span>${['A', 'B', 'C', 'D'].map((s) => `<i class="${doneEnSemana(w, s) ? 'on' : dateOf(w, SESIONES[s].dow) < t ? 'miss' : ''}" title="${SESIONES[s].nombre}"></i>`).join('')}</div>`;
+    grid += `<div class="grow-row" style="grid-template-columns:40px repeat(${PL.orden.length},1fr)"><span class="small muted">S${((w - 1) % 12) + 1}</span>${PL.orden.map((s) => `<i class="${doneEnSemana(w, s) ? 'on' : dateOf(w, PL.ses[s].dow) < t ? 'miss' : ''}" title="${PL.ses[s].nombre}"></i>`).join('')}</div>`;
   }
   const L = logsOrdenados();
   const conEj = [...Object.keys(EJERCICIOS), ...S.ejPropios.map((e) => e.id)].filter((id) => L.some((l) => l.ex[id]?.sets.some((s) => s.ok)));
@@ -557,18 +656,18 @@ function vProgreso() {
   return `${header('Progreso')}<section class="wrap">
     <div class="stats">
       <div><b class="${perd > 0 ? 'good' : ''}">${perd > 0 ? '−' : ''}${fmtN(Math.abs(perd))}</b><span>kg desde el inicio</span></div>
-      <div><b>${faltan > 0 ? fmtN(faltan) : '🎯'}</b><span>${faltan > 0 ? `kg para ${p.metaMax}` : '¡meta lograda!'}</span></div>
+      ${tieneMeta ? `<div><b>${faltan > 0 ? fmtN(faltan) : '🎯'}</b><span>${faltan > 0 ? 'kg para tu meta' : '¡en tu meta!'}</span></div>` : `<div><b>${fmtN(imc)}</b><span>IMC actual</span></div>`}
       <div><b>${ritmo === '' ? '—' : fmtN(ritmo)}</b><span>kg/semana (últ. 5 sem)</span></div>
     </div>
     <div class="card"><h3>⚖️ Peso corporal</h3>
       <form id="fpeso" class="inline"><input name="fecha" type="date" value="${t}" required><input name="kg" type="text" inputmode="decimal" placeholder="kg" required><input name="cintura" type="text" inputmode="decimal" placeholder="cintura"><button class="btn primary">+</button></form>
-      ${chartLine(ptsPeso, { band: [p.metaMin, p.metaMax], label: 'peso', dec: true, vacio: 'Registra tu peso semanal.' })}
-      <p class="small muted">Franja verde = tu meta (${p.metaMin}–${p.metaMax} kg). IMC actual: ${fmtN(imc)}. Ritmo saludable: −0,5 a −1 kg por semana.</p>
+      ${chartLine(ptsPeso, { band: tieneMeta ? [p.metaMin, p.metaMax] : null, label: 'peso', dec: true, vacio: 'Registra tu peso semanal.' })}
+      <p class="small muted">${tieneMeta ? `Franja verde = tu meta (${fmtN(p.metaMin)}–${fmtN(p.metaMax)} kg). ` : ''}IMC actual: ${fmtN(imc)}.${p.objetivo === 'bajar' ? ' Ritmo saludable: −0,5 a −1 kg por semana.' : ''}</p>
       ${ptsCint.length ? `<h4>Cintura (cm)</h4>${chartLine(ptsCint, { label: 'cintura', dec: true, h: 130 })}` : ''}
       <details><summary class="small">Ver registros</summary><ul class="plist">${[...pesos].reverse().map((x) => `<li><span>${fmt(x.fecha)}</span><b>${fmtN(x.kg)} kg</b><span class="muted">${x.cintura ? fmtN(x.cintura) + ' cm' : ''}</span><button class="link danger" data-act="delpeso" data-f="${x.fecha}" aria-label="Eliminar">✕</button></li>`).join('')}</ul></details>
     </div>
-    <div class="card"><h3>📅 Constancia</h3><div class="cgrid2"><div class="grow-row head"><span></span><b>Ma</b><b>Mi</b><b>Ju</b><b>Vi</b></div>${grid}</div></div>
-    <div class="card"><h3>🫀 Minutos de cardio por semana</h3>${chartBars(semanas, minutos, { min: 30, stack: minCam, label: 'minutos cardio' })}<p class="legend small"><i class="lg1"></i>Elíptica <i class="lg2"></i>Caminata (estimado: 12 min por km)</p><p class="small muted">Total acumulado: <b>${Math.round(totalMin)} min</b>. Recomendación de salud: 150+ min/semana.</p></div>
+    <div class="card"><h3>📅 Constancia</h3><div class="cgrid2"><div class="grow-row head" style="grid-template-columns:40px repeat(${PL.orden.length},1fr)"><span></span>${PL.orden.map((s) => `<b>${DIAS[PL.ses[s].dow].slice(0, 2)}</b>`).join('')}</div>${grid}</div></div>
+    <div class="card"><h3>🫀 Minutos de cardio por semana</h3>${chartBars(semanas, minutos, { min: 30, stack: minCam, label: 'minutos cardio' })}<p class="legend small"><i class="lg1"></i>${PL.cardio.label} <i class="lg2"></i>Caminata (estimado: 12 min por km)</p><p class="small muted">Total acumulado: <b>${Math.round(totalMin)} min</b>. Recomendación de salud: 150+ min/semana.</p></div>
     <div class="card"><h3>🚶 Caminatas</h3>
       <form id="fcamina2" class="inline"><input name="fecha" type="date" value="${t}" required><input name="pasos" type="number" inputmode="numeric" placeholder="pasos" aria-label="Pasos"><input name="km" type="text" inputmode="decimal" placeholder="km" aria-label="Distancia en km"><button class="btn primary" aria-label="Guardar caminata">+</button></form>
       <p class="small muted">Pasos por semana</p>${chartBars(semanas, pasosCam, { min: 10000, label: 'pasos por semana' })}<p class="small muted">Km por semana</p>${chartBars(semanas, kmCam, { min: 5, label: 'km caminados', dec: true })}
@@ -576,7 +675,7 @@ function vProgreso() {
       ${cams.length ? `<details><summary class="small">Ver registros</summary><ul class="plist">${cams.map((c) => `<li><span>${fmt(c.fecha)}</span><b>${resumenCam([c])}</b><button class="link danger" data-act="delcam" data-id="${c.id}" aria-label="Eliminar">✕</button></li>`).join('')}</ul></details>` : ''}
     </div>
     <div class="card"><h3>🏋️ Fuerza</h3>${ejChart}<p class="small muted">Volumen total levantado: <b>${Math.round(vol).toLocaleString('es-CL')} kg</b></p></div>
-    <div class="card"><h3>🦵 Dolor de rodilla</h3>${chartLine(rod, { yMin: 0, yMax: 10, label: 'dolor rodilla', vacio: 'Se registra al terminar cada sesión.', h: 130 })}<p class="small muted">Lo ideal es que la tendencia baje con las semanas. Si sube o pasa de 5, consulta a un kinesiólogo.</p></div>
+    <div class="card"><h3>🦵 ${tieneLimit('rodillas') ? 'Dolor de rodilla' : 'Molestias articulares'}</h3>${chartLine(rod, { yMin: 0, yMax: 10, label: 'dolor rodilla', vacio: 'Se registra al terminar cada sesión.', h: 130 })}<p class="small muted">Lo ideal es que la tendencia baje con las semanas. Si sube o pasa de 5, consulta a un kinesiólogo.</p></div>
   </section>`;
 }
 
@@ -885,7 +984,7 @@ function vComida() {
     ${meals}
     <div class="card"><h3>📊 Últimos 14 días</h3>${chartBars(labs, vals, { min: o.kcal, hl: 13, goal: o.kcal, noVal: true, label: 'calorías por día' })}
       <p class="small muted">${prom ? `Promedio de los últimos 7 días con registro: <b>${prom.toLocaleString('es-CL')} kcal</b>. ` : ''}La línea punteada es tu meta (${o.kcal.toLocaleString('es-CL')} kcal).</p></div>
-    <details class="card acc"><summary>¿Cómo se calcula tu meta?</summary><p>Gasto estimado: ~${o.tdee.toLocaleString('es-CL')} kcal/día (metabolismo basal ${o.bmr} kcal × actividad). Tu meta tiene un déficit de ~20% para bajar 0,5–0,8 kg por semana y se recalcula sola con tu último peso. Agua recomendada: ${o.agua} L/día.</p></details>
+    <details class="card acc"><summary>¿Cómo se calcula tu meta?</summary><p>Gasto estimado: ~${o.tdee.toLocaleString('es-CL')} kcal/día (metabolismo basal ${o.bmr} kcal × actividad). ${textoMeta(o)} Agua recomendada: ${o.agua} L/día.</p></details>
     <a class="card row-link" href="#/alimentos"><span>🥫</span><div class="grow"><b>Mis alimentos</b><span class="small muted">Edita o borra los productos que creaste o escaneaste</span></div>›</a>
     <h2 class="sec">Claves</h2>
     ${CONSEJOS_COMIDA.map(([ti, de]) => `<details class="card acc"><summary>${ti}</summary><p>${de}</p></details>`).join('')}
@@ -968,7 +1067,7 @@ function vMas() {
     <a class="card row-link" href="#/biblioteca"><span>📚</span><div class="grow"><b>Ejercicios</b><span class="small muted">Técnica, animación y videos</span></div>›</a>
     <a class="card row-link" href="#/rutinas"><span>🧩</span><div class="grow"><b>Mis rutinas</b><span class="small muted">Crea rutinas y ejercicios propios</span></div>›</a>
     <a class="card row-link" href="#/alimentos"><span>🥫</span><div class="grow"><b>Mis alimentos</b><span class="small muted">Productos creados o escaneados: editar o borrar</span></div>›</a>
-    <a class="card row-link" href="#/perfil"><span>👤</span><div class="grow"><b>Mi perfil</b><span class="small muted">Edad, peso, meta, fecha de inicio</span></div>›</a>
+    <a class="card row-link" href="#/perfil"><span>👤</span><div class="grow"><b>Mi perfil y objetivos</b><span class="small muted">Datos, objetivo, lugar, equipo, días y molestias</span></div>›</a>
     <div class="card"><h3>💾 Respaldo de datos</h3>
       <p class="small muted">Tus datos se guardan solo en este teléfono. Exporta un respaldo cada cierto tiempo (por ejemplo a Google Drive o WhatsApp).</p>
       <div class="btns"><button class="btn" data-act="export">Exportar respaldo</button><label class="btn">Importar<input type="file" accept="application/json,.json" id="fimport" hidden></label><button class="btn" data-act="share">Compartir resumen</button></div>
@@ -978,7 +1077,7 @@ function vMas() {
       <p class="small"><b>Android (Chrome):</b> menú ⋮ → <i>Instalar aplicación</i> o <i>Agregar a pantalla principal</i>.<br><b>iPhone (Safari):</b> botón Compartir ⬆️ → <i>Agregar a inicio</i>.<br>Una vez instalada funciona sin internet (los videos sí requieren conexión).</p></div>
     <div class="card small-card"><h3>⚠️ Precauciones</h3><p class="small">Antes de empezar, idealmente hazte un chequeo médico general (presión, ECG si tienes antecedentes). Detén el ejercicio si sientes dolor en el pecho, mareo intenso o falta de aire desproporcionada. Dolor articular punzante = detente y ajusta.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">v1.4 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">v1.5 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 
@@ -998,7 +1097,7 @@ function techHTML(id) {
     <p class="small"><b>Músculos:</b> ${e.musculos}<br><b>Equipo:</b> ${e.equipo}</p>
     <h4>Paso a paso</h4><ol>${e.pasos.map((x) => `<li>${x}</li>`).join('')}</ol>
     <h4>Errores comunes</h4><ul class="x">${e.errores.map((x) => `<li>${x}</li>`).join('')}</ul>
-    ${e.rodilla && e.rodilla !== '—' ? `<div class="knee"><b>🦵 Tus rodillas:</b> ${e.rodilla}</div>` : ''}
+    ${e.rodilla && e.rodilla !== '—' && tieneLimit('rodillas') ? `<div class="knee"><b>🦵 Tus rodillas:</b> ${e.rodilla}</div>` : ''}
     <a class="btn yt" href="https://www.youtube.com/results?search_query=${encodeURIComponent(e.yt)}" target="_blank" rel="noopener">▶ Ver videos en YouTube</a>`;
 }
 
@@ -1025,8 +1124,8 @@ function route() {
   let html;
   ctx = {};
   switch (v) {
-    case 'onboarding': html = vPerfil(true); break;
-    case 'perfil': html = vPerfil(false); break;
+    case 'onboarding': html = vWizard(true); break;
+    case 'perfil': html = vWizard(false); break;
     case 'sesion': ctx = { date: h[1], sid: h[2] }; html = vSesion(h[1], h[2]); break;
     case 'plan': html = vPlan(); break;
     case 'progreso': html = vProgreso(); break;
@@ -1043,6 +1142,7 @@ function route() {
   main.innerHTML = html;
   if (v !== 'comida') comidaDia = null;
   if (v !== 'rutina') rDraft = null;
+  if (v !== 'perfil' && v !== 'onboarding') wz = null;
   sheet.open = false;
   document.body.classList.remove('sheet-open');
   document.body.classList.toggle('no-nav', v === 'onboarding');
@@ -1224,6 +1324,35 @@ const actions = {
     S.comidas[comidaDia] = [...diaComidas(comidaDia), ...prev.map((x, i) => ({ ...x, id: Date.now() + '' + i }))];
     save(true); toast('Comida copiada de ayer'); rerender();
   },
+  wzset(btn) {
+    const f = btn.dataset.f;
+    let v = btn.dataset.v;
+    if (f === 'dias' || f === 'dur') v = +v;
+    if (f === 'limit' && v === '__none') wz.limit = [];
+    else if (btn.dataset.multi) wz[f] = wz[f].includes(v) ? wz[f].filter((x) => x !== v) : [...wz[f], v];
+    else wz[f] = v;
+    rerender();
+  },
+  wznext() {
+    const err = wzValidar();
+    if (err) { toast(err); return; }
+    wzPaso = Math.min(WZ_PASOS.length - 1, wzPaso + 1);
+    route();
+  },
+  wzback() { wzPaso = Math.max(0, wzPaso - 1); route(); },
+  wzsave() {
+    const first = !S.perfil;
+    const p = perfilDesdeWz();
+    const pesoNuevo = num(wz.peso);
+    S.perfil = p;
+    if (first) addPeso(today() < p.inicio ? today() : p.inicio, pesoNuevo);
+    else if (pesoNuevo && Math.abs(pesoNuevo - pesoActual()) > 0.05) addPeso(today(), pesoNuevo);
+    wz = null;
+    save(true);
+    toast(first ? '¡Plan creado! 💪' : 'Perfil y plan actualizados ✓');
+    location.hash = '#/hoy';
+    route();
+  },
   radd() {
     const id = $('#radd').value;
     if (rDraft.ejercicios.some((e) => e.id === id)) { toast('Ese ejercicio ya está en la rutina'); return; }
@@ -1305,7 +1434,7 @@ function rerender() {
 function resumenTexto() {
   const p = S.perfil, pesos = [...S.pesos].sort((a, b) => a.fecha.localeCompare(b.fecha));
   const L = logsOrdenados().filter((l) => l.done).slice(-12);
-  let t = `RESUMEN ENTRENAMIENTO (${fmt(today())})\nPerfil: ${p.edad} años, ${p.estatura} cm, inicio ${p.peso} kg, meta ${p.metaMin}-${p.metaMax} kg\n`;
+  let t = `RESUMEN ENTRENAMIENTO (${fmt(today())})\nPerfil: ${p.edad} años, ${p.estatura} cm, inicio ${p.peso} kg, objetivo ${p.objetivo}${p.metaMin ? `, meta ${p.metaMin}-${p.metaMax} kg` : ''}, ${p.lugar}, ${(p.dias || []).length} días/sem\n`;
   t += `Peso: ${pesos.slice(-8).map((x) => `${fmt(x.fecha)} ${x.kg}kg${x.cintura ? ` (${x.cintura}cm)` : ''}`).join(' | ') || 'sin registros'}\n\nÚltimas sesiones:\n`;
   for (const l of L) {
     t += `- ${fmt(l.fecha, true)} ${nombreSes(l)} · RPE ${l.rpe} · rodilla ${l.rodilla}/10\n`;
@@ -1356,6 +1485,8 @@ function init() {
     } else if (el.id === 'fq') {
       sheet.q = num(el.value) || 1;
       $('#fprev').textContent = prevTxt(sheet.food, sheet.q);
+    } else if (el.dataset.wz && wz) {
+      wz[el.dataset.wz] = el.value;
     } else if (el.dataset.rf && rDraft) {
       const f = el.dataset.rf;
       if (el.dataset.i !== undefined) rDraft.ejercicios[+el.dataset.i][f] = el.value;
@@ -1403,15 +1534,8 @@ function init() {
   main.addEventListener('submit', (e) => {
     e.preventDefault();
     const f = e.target, d = Object.fromEntries(new FormData(f));
-    if (f.id === 'fperfil') {
-      const first = !S.perfil;
-      const perfil = { edad: num(d.edad), sexo: d.sexo, estatura: num(d.estatura), peso: num(d.peso), metaMin: Math.min(num(d.metaMin), num(d.metaMax)), metaMax: Math.max(num(d.metaMin), num(d.metaMax)), inicio: d.inicio };
-      S.perfil = perfil;
-      if (first) addPeso(today() < d.inicio ? today() : d.inicio, d.peso);
-      save(true);
-      toast(first ? '¡Plan creado! 💪' : 'Perfil guardado');
-      location.hash = '#/hoy';
-      if (first) route();
+    if (f.id === 'fcustom-x') {
+      // (reservado)
     } else if (f.id === 'fcustom') {
       const a = guardarAlimento(d);
       toast(d.bc ? 'Producto guardado en Mis alimentos ✓' : 'Alimento guardado ✓');

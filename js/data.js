@@ -173,13 +173,13 @@ const ANIMS = {
 /* ---------- Ejercicios ---------- */
 const EJERCICIOS = {
   sentadilla_cajon: {
-    nombre: 'Sentadilla a cajón con mancuerna',
+    nombre: 'Sentadilla a cajón / silla',
     musculos: 'Cuádriceps, glúteos, core',
-    equipo: '1 mancuerna + silla firme o cajón',
+    equipo: 'Silla firme o cajón (+ 1 mancuerna opcional)',
     tipo: 'fuerza', step: 2,
     pasos: [
       'Párate frente a una silla firme, pies al ancho de hombros y puntas levemente hacia afuera.',
-      'Sostén la mancuerna vertical pegada al pecho, codos hacia abajo.',
+      'Si usas peso, sostén la mancuerna vertical pegada al pecho, codos hacia abajo.',
       'Lleva la cadera hacia atrás como si te fueras a sentar; baja controlado (2-3 s).',
       'Toca la silla con los glúteos SIN dejarte caer ni relajarte.',
       'Empuja el suelo con todo el pie y sube apretando glúteos.',
@@ -189,12 +189,12 @@ const EJERCICIOS = {
     yt: 'sentadilla a cajón goblet técnica',
   },
   press_suelo: {
-    nombre: 'Press de pecho en el suelo',
+    nombre: 'Press de pecho con mancuernas (suelo o banco)',
     musculos: 'Pectoral, tríceps, hombro anterior',
     equipo: '2 mancuernas',
     tipo: 'fuerza', step: 2,
     pasos: [
-      'Acuéstate boca arriba con rodillas flexionadas y pies apoyados.',
+      'Acuéstate boca arriba en el suelo (rodillas flexionadas) o en un banco plano.',
       'Mancuernas a la altura del pecho, codos a ~45° del cuerpo (no abiertos en cruz).',
       'Empuja hacia arriba hasta estirar los brazos, sin chocar las mancuernas.',
       'Baja controlado hasta que la parte de atrás del brazo toque el suelo suavemente.',
@@ -500,92 +500,38 @@ const FASES = [
   { n: 3, nombre: 'Intensificación', semanas: '9 – 12', desc: 'Más volumen e intervalos más exigentes. Mide tu progreso: peso, cintura y minutos de cardio.' },
 ];
 
-const SESIONES = {
-  A: {
-    nombre: 'Fuerza A', foco: 'Piernas, empuje y espalda', dur: '40-45 min', dow: 2,
-    bloques: [
-      { tipo: 'calentamiento' },
-      { tipo: 'ej', id: 'sentadilla_cajon', rx: [[3, '12-15', 75], [3, '10-12', 75], [4, '8-10', 90]] },
-      { tipo: 'ej', id: 'press_suelo', rx: [[3, '12-15', 75], [3, '10-12', 75], [4, '8-10', 90]] },
-      { tipo: 'ej', id: 'remo_mancuerna', rx: [[3, '12-15', 60], [3, '10-12', 60], [4, '8-10', 75]] },
-      { tipo: 'ej', id: 'puente', rx: [[3, '15', 60], [3, '12', 60], [4, '10', 75]] },
-      { tipo: 'ej', id: 'press_militar', rx: [[2, '12-15', 60], [3, '10-12', 60], [3, '8-10', 75]] },
-      { tipo: 'ej', id: 'plancha', rx: [[3, '20-30 s', 45], [3, '30-40 s', 45], [3, '45 s', 45]] },
-      { tipo: 'cardio', kind: 'final' },
-    ],
-  },
-  B: {
-    nombre: 'Cardio + Rodillas', foco: 'Elíptica continua, core y estabilidad de rodilla', dur: '35-50 min', dow: 3,
-    bloques: [
-      { tipo: 'calentamiento', corto: true },
-      { tipo: 'cardio', kind: 'z2' },
-      { tipo: 'ej', id: 'abduccion_cadera', rx: [[2, '15', 30], [3, '15', 30], [3, '20', 30]] },
-      { tipo: 'ej', id: 'elevacion_talones', rx: [[3, '15', 45], [3, '15', 45], [3, '20', 45]] },
-      { tipo: 'ej', id: 'bird_dog', rx: [[3, '8', 30], [3, '10', 30], [3, '12', 30]] },
-      { tipo: 'ej', id: 'dead_bug', rx: [[3, '8', 30], [3, '10', 30], [3, '12', 30]] },
-    ],
-  },
-  C: {
-    nombre: 'Fuerza B', foco: 'Cadena posterior, espalda y brazos', dur: '40-45 min', dow: 4,
-    bloques: [
-      { tipo: 'calentamiento' },
-      { tipo: 'ej', id: 'peso_muerto_rumano', rx: [[3, '12', 90], [3, '10', 90], [4, '8', 120]] },
-      { tipo: 'ej', id: 'flexiones_inclinadas', rx: [[3, '8-12', 60], [3, '10-15', 60], [4, '12-15', 60]] },
-      { tipo: 'ej', id: 'remo_barra', rx: [[3, '12', 75], [3, '10-12', 75], [4, '8-10', 90]] },
-      { tipo: 'ej', id: 'sentadilla_pared', rx: [[3, '20-30 s', 60], [3, '30-45 s', 60], [3, '45-60 s', 60]] },
-      { tipo: 'ej', id: 'elevaciones_laterales', rx: [[2, '12-15', 45], [3, '12-15', 45], [3, '12-15', 45]] },
-      { tipo: 'ej', id: 'curl_biceps', rx: [[2, '12', 45], [3, '10-12', 45], [3, '10-12', 45]] },
-      { tipo: 'ej', id: 'extension_triceps', rx: [[2, '12', 45], [3, '10-12', 45], [3, '10-12', 45]] },
-      { tipo: 'ej', id: 'paseo_granjero', rx: [[3, '30 s', 60], [3, '40 s', 60], [3, '45 s', 60]] },
-      { tipo: 'cardio', kind: 'final' },
-    ],
-  },
-  D: {
-    nombre: 'Circuito + Intervalos', foco: 'Quema de grasa y capacidad cardiovascular', dur: '40-45 min', dow: 5,
-    bloques: [
-      { tipo: 'calentamiento' },
-      {
-        tipo: 'circuito',
-        rondas: [3, 3, 4], trabajo: ['30 s', '40 s', '40 s'], pausa: [30, 20, 20], entreRondas: [90, 90, 75],
-        ejercicios: [
-          { id: 'peso_muerto_mancuernas', fases: [1] },
-          { id: 'swing', fases: [2, 3] },
-          { id: 'sentadilla_cajon', fases: [1, 2, 3] },
-          { id: 'flexiones_inclinadas', fases: [1, 2, 3] },
-          { id: 'remo_barra', fases: [1, 2, 3] },
-          { id: 'plancha', fases: [1, 2, 3] },
-        ],
-      },
-      { tipo: 'cardio', kind: 'intervalos' },
-    ],
-  },
-};
+// Las sesiones se generan según el perfil: ver js/plan.js
 
 const CALENTAMIENTO = {
-  normal: ['5 min de elíptica suave (puedes conversar sin problema)', '10 círculos de brazos adelante y atrás', '10 bisagras de cadera sin peso', '10 sentadillas a cajón sin peso (lentas)', '10 puentes de glúteo'],
-  corto: ['3 min de elíptica muy suave', '10 círculos de brazos', '10 puentes de glúteo'],
+  normal: ['5 min de cardio suave (puedes conversar sin problema)', '10 círculos de brazos adelante y atrás', '10 bisagras de cadera sin peso', '10 sentadillas sin peso (lentas, a una silla si tienes molestias de rodilla)', '10 puentes de glúteo'],
+  corto: ['3 min de cardio muy suave', '10 círculos de brazos', '10 puentes de glúteo'],
 };
 
-/* Prescripción de cardio según semana */
-function cardioRx(kind, semana) {
+/* Prescripción de cardio según semana, máquina (mod) y objetivo (factor) */
+function cardioRx(kind, semana, mod, factor = 1) {
   const w = Math.min(semana, 12);
+  const m = mod || { label: 'Elíptica', fuerte: 'sube la cadencia' };
+  const esc = (x) => Math.max(5, Math.round(x * factor));
   if (kind === 'final') {
-    const min = w <= 4 ? 10 : w <= 8 ? 12 : 15;
-    return { titulo: `Elíptica final · ${min} min`, min, detalle: 'Zona 2: ritmo constante en el que puedes hablar en frases cortas.', zona: 'z2' };
+    const min = esc(w <= 4 ? 10 : w <= 8 ? 12 : 15);
+    return { titulo: `${m.label} final · ${min} min`, min, detalle: 'Zona 2: ritmo constante en el que puedes hablar en frases cortas.', zona: 'z2' };
   }
   if (kind === 'z2') {
-    const min = Math.min(20 + (w - 1) * 2, 40);
-    return { titulo: `Elíptica continua · ${min} min`, min, detalle: 'Zona 2 todo el tiempo. Si al principio no alcanzas, haz pausas de 1 min y continúa: lo importante es completar los minutos.', zona: 'z2' };
+    const min = esc(Math.min(20 + (w - 1) * 2, 40));
+    return { titulo: `${m.label} continua · ${min} min`, min, detalle: 'Zona 2 todo el tiempo. Si al principio no alcanzas, haz pausas de 1 min y continúa: lo importante es completar los minutos.', zona: 'z2' };
   }
   // intervalos
   if (w <= 4) {
-    const min = 15 + w;
-    return { titulo: `Elíptica progresiva · ${min} min`, min, detalle: `Zona 2 constante. En los últimos ${w <= 2 ? 4 : 6} min haz 30 s más rápido cada 1 min (sube la cadencia, no tanto la resistencia).`, zona: 'z2' };
+    const min = esc(15 + w);
+    return { titulo: `${m.label} progresiva · ${min} min`, min, detalle: `Zona 2 constante. En los últimos ${w <= 2 ? 4 : 6} min haz 30 s más intensos cada 1 min (${m.fuerte}).`, zona: 'z2' };
   }
+  const rep = factor >= 1.2 ? 1 : factor < 0.9 ? -1 : 0;
   if (w <= 8) {
-    return { titulo: 'Intervalos · 26 min', min: 26, detalle: '5 min suave → 6 × (1 min FUERTE + 2 min suave) → 3 min suave.', zona: 'int' };
+    const n = 6 + rep, min = 8 + n * 3;
+    return { titulo: `Intervalos ${m.label} · ${min} min`, min, detalle: `5 min suave → ${n} × (1 min FUERTE + 2 min suave) → 3 min suave. FUERTE = ${m.fuerte}.`, zona: 'int' };
   }
-  return { titulo: 'Intervalos · 28 min', min: 28, detalle: '5 min suave → 8 × (1 min FUERTE + 1:30 suave) → 3 min suave.', zona: 'int' };
+  const n = 8 + rep, min = Math.round(8 + n * 2.5);
+  return { titulo: `Intervalos ${m.label} · ${min} min`, min, detalle: `5 min suave → ${n} × (1 min FUERTE + 1:30 suave) → 3 min suave. FUERTE = ${m.fuerte}.`, zona: 'int' };
 }
 
 /* ---------- Alimentación ---------- */

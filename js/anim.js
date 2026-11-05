@@ -102,9 +102,17 @@ const Fig = (() => {
     const mir = (a) => 180 - a;
     const kR = add(hpR, dir(la[0], L.th * ls[0])), anR = add(kR, dir(la[1], L.sh * ls[1]));
     const kL = add(hpL, dir(mir(la[0]), L.th * ls[0])), anL = add(kL, dir(mir(la[1]), L.sh * ls[1]));
-    const eR = add(shR, dir(aa[0], L.ua)), hR = add(eR, dir(aa[1], L.fa));
-    const eL = add(shL, dir(mir(aa[0]), L.ua)), hL = add(eL, dir(mir(aa[1]), L.fa));
-    return { cx, y, shR, shL, hpR, hpL, head, kR, anR, kL, anL, eR, hR, eL, hL, handR: hR, handL: hL };
+    let eR, hR, eL, hL;
+    if (p.arm.ik) {
+      const t = p.arm.ik, bd = p.arm.bend ?? 1;
+      [eR, hR] = ik(shR, t, L.ua, L.fa, bd);
+      [eL, hL] = ik(shL, [2 * cx - t[0], t[1]], L.ua, L.fa, -bd);
+    } else {
+      eR = add(shR, dir(aa[0], L.ua)); hR = add(eR, dir(aa[1], L.fa));
+      eL = add(shL, dir(mir(aa[0]), L.ua)); hL = add(eL, dir(mir(aa[1]), L.fa));
+    }
+    const handsMid = [(hR[0] + hL[0]) / 2, (hR[1] + hL[1]) / 2];
+    return { cx, y, shR, shL, hpR, hpL, head, kR, anR, kL, anL, eR, hR, eL, hL, handR: hR, handL: hL, handsMid, ry: p.ry };
   }
 
   /* ---- dibujo ---- */
@@ -126,7 +134,7 @@ const Fig = (() => {
   function propsSVG(anim, J, layer) {
     let s = '';
     for (const pr of anim.props || []) {
-      const fg = ['db', 'dbh', 'dbv', 'plate'].includes(pr.t);
+      const fg = ['db', 'dbh', 'dbv', 'plate', 'bar', 'hbar', 'rope'].includes(pr.t);
       if ((layer === 'fg') !== fg) continue;
       switch (pr.t) {
         case 'rect':
@@ -165,6 +173,44 @@ const Fig = (() => {
           s += plate([p[0], p[1] + (pr.dy || 0)]);
           break;
         }
+        case 'line':
+          s += `<path d="M${pr.x1} ${pr.y1} L${pr.x2} ${pr.y2}" class="fig-prop-l" stroke-width="${pr.w || 5}" fill="none" stroke-linecap="round"/>`;
+          break;
+        case 'hline':
+          s += `<path d="M${pr.x1} ${pr.y} L${pr.x2} ${pr.y}" class="fig-prop-l" stroke-width="${pr.w || 5}" fill="none" stroke-linecap="round"/>`;
+          break;
+        case 'cable': {
+          const a = J[pr.from];
+          s += `<path d="M${pt(a)} L${pr.to[0]} ${pr.to[1]}" class="fig-cable" stroke-width="2" fill="none"/>`;
+          break;
+        }
+        case 'bar': { // plataforma o barra corta centrada en una articulación
+          const c = J[pr.at], d = dir(pr.ang, (pr.len || 40) / 2);
+          s += `<path d="M${pt([c[0] - d[0], c[1] - d[1]])} L${pt([c[0] + d[0], c[1] + d[1]])}" class="fig-accl" stroke-width="7" fill="none" stroke-linecap="round"/>`;
+          break;
+        }
+        case 'hbar': { // barra entre dos manos (vista frontal)
+          const a = J[pr.a], b = J[pr.b], e = pr.ext || 10;
+          s += `<path d="M${f1(Math.min(a[0], b[0]) - e)} ${f1(a[1])} L${f1(Math.max(a[0], b[0]) + e)} ${f1(b[1])}" class="fig-accl" stroke-width="5" fill="none" stroke-linecap="round"/>`;
+          break;
+        }
+        case 'rope': { // cuerda para saltar
+          const a = J.handL, b = J.handR, cy = 2 * J.ry - (a[1] + b[1]) / 2;
+          s += `<path d="M${pt(a)} Q${f1(J.cx)} ${f1(cy)} ${pt(b)}" class="fig-cable" stroke-width="2.5" fill="none"/>`;
+          break;
+        }
+        case 'bike':
+          s += `<rect x="70" y="163" width="120" height="7" rx="3" class="fig-prop"/>` +
+            `<path d="M100 104 L112 150 L160 82" class="fig-prop-l" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>` +
+            `<path d="M112 150 L112 163 M160 82 L165 140" class="fig-prop-l" stroke-width="5" fill="none" stroke-linecap="round"/>` +
+            `<rect x="88" y="96" width="24" height="7" rx="3" class="fig-prop"/><path d="M152 78 L168 78" class="fig-prop-l" stroke-width="5" stroke-linecap="round"/>` +
+            `<circle cx="165" cy="142" r="16" class="fig-prop"/><circle cx="112" cy="150" r="6" class="fig-prop"/>`;
+          break;
+        case 'treadmill':
+          s += `<rect x="30" y="160" width="170" height="10" rx="4" class="fig-prop"/>` +
+            `<path d="M190 160 L176 70 M176 92 L146 94" class="fig-prop-l" stroke-width="5" fill="none" stroke-linecap="round"/>` +
+            `<rect x="164" y="60" width="26" height="12" rx="3" class="fig-prop"/>`;
+          break;
       }
     }
     return s;
@@ -197,7 +243,7 @@ const Fig = (() => {
   }
 
   function draw(anim, pose) {
-    const floor = `<line x1="0" y1="${G + 3}" x2="240" y2="${G + 3}" class="fig-floor"/>`;
+    const floor = anim.noFloor ? '' : `<line x1="0" y1="${G + 3}" x2="240" y2="${G + 3}" class="fig-floor"/>`;
     return floor + (anim.mode === 'front' ? drawFront(anim, pose) : drawSide(anim, pose));
   }
 
