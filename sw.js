@@ -1,6 +1,7 @@
 /* Service worker: la app funciona sin internet.
-   Al publicar cambios, sube el número de VERSION. */
-const VERSION = 'entreno-v5';
+   Con conexión siempre busca la versión más nueva (red primero);
+   sin conexión usa la copia guardada. Al publicar cambios, sube VERSION. */
+const VERSION = 'entreno-v6';
 const FILES = [
   './', './index.html', './manifest.webmanifest', './css/app.css',
   './js/data.js', './js/foods.js', './js/anim.js', './js/app.js',
@@ -8,7 +9,12 @@ const FILES = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
+  // cache: 'reload' evita guardar archivos viejos desde la caché del navegador
+  e.waitUntil(
+    caches.open(VERSION)
+      .then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (e) => {
@@ -18,17 +24,17 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// Responde desde caché y actualiza en segundo plano
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
   e.respondWith(
-    caches.open(VERSION).then(async (cache) => {
-      const hit = await cache.match(e.request, { ignoreSearch: true });
-      const net = fetch(e.request).then((res) => {
-        if (res.ok) cache.put(e.request, res.clone());
+    fetch(e.request, { cache: 'no-cache' })
+      .then((res) => {
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(VERSION).then((c) => c.put(e.request, copy));
+        }
         return res;
-      }).catch(() => hit);
-      return hit || net;
-    })
+      })
+      .catch(() => caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || caches.match('./index.html')))
   );
 });
