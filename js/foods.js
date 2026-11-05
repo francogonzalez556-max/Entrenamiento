@@ -171,7 +171,31 @@ const ALIMENTOS_RAW = [
   ['Miel', '1 cucharada (20 g)', 64, 0, 17, 0, 'Snacks y dulces'],
 ];
 
-const ALIMENTOS = ALIMENTOS_RAW.map((a, i) => ({ id: 'b' + i, n: a[0], p: a[1], k: a[2], pr: a[3], c: a[4], g: a[5], cat: a[6] }));
+// Gramos (o ml) aproximados de la porción cuando no vienen indicados en el texto
+const GRAMOS_EXTRA = {
+  'Huevo cocido o revuelto': 50, 'Huevo frito': 55, 'Clara de huevo': 33, 'Omelette / tortilla de 2 huevos': 130,
+  'Mandarina': 80, 'Kiwi': 75, 'Durazno': 150, 'Mote con huesillo': 400,
+  'Ensalada de lechuga y tomate': 200, 'Ensalada chilena': 200, 'Verduras mixtas / salteadas': 150, 'Tomate': 120,
+  'Zanahoria rallada': 55, 'Brócoli cocido': 155, 'Porotos verdes': 125, 'Zapallo cocido': 245, 'Sopa / crema de verduras': 300,
+  'Ketchup': 17, 'Pebre': 30,
+  'Cazuela de vacuno': 500, 'Cazuela de pollo': 500, 'Charquicán': 350, 'Pastel de choclo': 450, 'Pollo con arroz': 400,
+  'Arroz con huevo frito': 300, 'Tallarines con salsa bolognesa': 400, 'Lasaña': 300, 'Lomo saltado': 450, 'Ceviche': 250,
+  'Humita': 250, 'Empanada de pino (horno)': 280, 'Empanada de queso frita': 150, 'Completo italiano': 250,
+  'Churrasco italiano': 350, 'Barros Luco': 300, 'Chacarero': 350, 'Sándwich ave palta': 280,
+  'Hamburguesa de local de comida rápida': 250, 'Pizza': 110, 'Sushi (rolls normales)': 300, 'Sushi tempura / frito': 330,
+  'Café o té sin azúcar': 200, 'Café con leche descremada': 250, 'Piscola': 300, 'Pisco sour': 150,
+  'Cabritas': 25, 'Torta / kuchen': 120, 'Berlín': 80,
+};
+const gramosPorcion = (p) => {
+  const m = String(p).match(/(\d+(?:[.,]\d+)?)\s*(g|ml)\b/);
+  return m ? +m[1].replace(',', '.') : null;
+};
+
+const ALIMENTOS = ALIMENTOS_RAW.map((a, i) => ({
+  id: 'b' + i, n: a[0], p: a[1], k: a[2], pr: a[3], c: a[4], g: a[5], cat: a[6],
+  gp: gramosPorcion(a[1]) || GRAMOS_EXTRA[a[0]] || null,
+  u: /ml/.test(a[1]) || a[6] === 'Bebidas' ? 'ml' : 'g',
+}));
 
 const COMIDAS_DIA = [
   ['desayuno', 'Desayuno', '☕'],
