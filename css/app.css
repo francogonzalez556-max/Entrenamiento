@@ -330,3 +330,10 @@ body.sheet-open { overflow: hidden; }
 .infobanner { background: color-mix(in srgb, var(--warn) 15%, var(--card)); border-left: 4px solid var(--warn); }
 .fi .tap { cursor: pointer; }
 .fi .small-btn { margin-top: 0; }
+
+/* v1.3.1: visor del escáner */
+.reader { position: relative; aspect-ratio: 4 / 3; min-height: 0; }
+.reader video { position: absolute; inset: 0; width: 100% !important; height: 100% !important; object-fit: cover; }
+.reader .aim { position: absolute; left: 5%; right: 5%; top: 20%; bottom: 20%; border: 3px solid var(--acc); border-radius: 12px; box-shadow: 0 0 0 999px rgba(0, 0, 0, .35); }
+.reader .aim i { position: absolute; left: 6%; right: 6%; top: 50%; height: 2px; background: #ff3b30; box-shadow: 0 0 8px #ff3b30; animation: scanline 1.6s ease-in-out infinite; }
+@keyframes scanline { 0%, 100% { transform: translateY(-35px); } 50% { transform: translateY(35px); } }

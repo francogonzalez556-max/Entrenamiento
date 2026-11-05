@@ -669,39 +669,85 @@ function desdeOFF(code, p) {
   return { bc: code, n: nombre, p: base === 100 ? `100 ${u}` : `1 porción (${fmtN(base)} ${u})`, k: k100 == null ? '' : Math.round(k100 * f), pr: r(n.proteins_100g), c: r(n.carbohydrates_100g), g: r(n.fat_100g), gp: base, u, off: true, incompleto: k100 == null,
     per100: { k: k100 == null ? '' : Math.round(k100), pr: n.proteins_100g ?? '', c: n.carbohydrates_100g ?? '', g: n.fat_100g ?? '' } };
 }
-let scanner = null, scanBusy = false, scanStop = Promise.resolve();
+// Lector: BarcodeDetector nativo si existe; si no (iPhone), ZXing en WebAssembly guardado en js/vendor
+let scanStream = null, scanTimer = null, scanBusy = false, detector = null;
+const FORMATOS_CB = ['ean_13', 'ean_8', 'upc_a', 'upc_e'];
 const setScanMsg = (t) => { const el = $('#scanmsg'); if (el) el.textContent = t; };
 function cargarLectorCB() {
-  if (window.Html5Qrcode) return Promise.resolve();
+  if (window.BarcodeDetectionAPI) return Promise.resolve();
   return new Promise((ok, err) => {
     const sc = document.createElement('script');
-    sc.src = 'js/vendor/html5-qrcode.min.js';
-    sc.onload = ok;
+    sc.src = 'js/vendor/barcode-detector.js';
+    sc.onload = () => {
+      try {
+        window.BarcodeDetectionAPI.setZXingModuleOverrides({
+          locateFile: (p, pre) => (p.endsWith('.wasm') ? new URL('js/vendor/' + p, location.href).href : pre + p),
+        });
+      } catch (e) { /* usa la ruta por defecto */ }
+      ok();
+    };
     sc.onerror = err;
     document.head.appendChild(sc);
   });
 }
-const formatosCB = () => { const F = window.Html5QrcodeSupportedFormats; return [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E]; };
+async function getDetector() {
+  if (detector) return detector;
+  if ('BarcodeDetector' in window) {
+    try {
+      const f = await window.BarcodeDetector.getSupportedFormats();
+      if (f.includes('ean_13')) return (detector = new window.BarcodeDetector({ formats: FORMATOS_CB }));
+    } catch (e) { /* sigue con ZXing */ }
+  }
+  await cargarLectorCB();
+  return (detector = new window.BarcodeDetectionAPI.BarcodeDetector({ formats: FORMATOS_CB }));
+}
+const codigoDe = (res) => (res || []).map((x) => String(x.rawValue || '').replace(/\D/g, '')).find((c) => c.length >= 8 && c.length <= 14);
 function stopScanner() {
-  const sc = scanner;
-  scanner = null;
-  if (sc) scanStop = (async () => { try { if (sc.isScanning) await sc.stop(); sc.clear(); } catch (e) { /* ya detenido */ } })();
-  return scanStop;
+  clearTimeout(scanTimer);
+  scanTimer = null;
+  if (scanStream) { scanStream.getTracks().forEach((t) => t.stop()); scanStream = null; }
+  return Promise.resolve();
 }
 async function startScanner() {
-  await scanStop;
-  if (scanner || !sheet.open || !sheet.scan || !$('#reader')) return;
+  stopScanner();
+  const video = $('#reader video');
+  if (!video) return;
   scanBusy = false;
   try {
-    await cargarLectorCB();
-    if (!sheet.open || !sheet.scan || !$('#reader')) return;
-    const sc = new window.Html5Qrcode('reader', { formatsToSupport: formatosCB(), verbose: false, experimentalFeatures: { useBarCodeDetectorIfSupported: true } });
-    scanner = sc;
-    await sc.start({ facingMode: 'environment' }, { fps: 10, qrbox: (w) => ({ width: Math.round(Math.max(120, Math.min(w * 0.9, 320))), height: 130 }) },
-      (txt) => { if (!scanBusy) { scanBusy = true; navigator.vibrate?.(80); buscarCodigo(txt); } }, () => {});
+    const det = getDetector(); // carga el lector mientras se abre la cámara
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+    if (!sheet.open || !sheet.scan || !document.body.contains(video)) { stream.getTracks().forEach((t) => t.stop()); return; }
+    scanStream = stream;
+    video.srcObject = stream;
+    await video.play().catch(() => {});
+    try {
+      const tr = stream.getVideoTracks()[0], cap = tr.getCapabilities ? tr.getCapabilities() : {};
+      if (cap.focusMode && cap.focusMode.includes('continuous')) await tr.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+    } catch (e) { /* sin control de enfoque */ }
+    const d = await det;
+    setScanMsg('Ubica el código dentro del recuadro y acerca el teléfono hasta que se vea nítido.');
+    const cv = document.createElement('canvas'), ctx = cv.getContext('2d', { willReadFrequently: true });
+    const loop = async () => {
+      if (!scanStream || scanBusy) return;
+      try {
+        const vw = video.videoWidth, vh = video.videoHeight;
+        if (vw && vh) {
+          // analiza el centro del cuadro (90% ancho x 60% alto), reducido a máx. 1280 px
+          const sw = vw * 0.9, sh = vh * 0.6, k = Math.min(1, 1280 / sw);
+          cv.width = Math.round(sw * k); cv.height = Math.round(sh * k);
+          ctx.drawImage(video, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, 0, cv.width, cv.height);
+          const code = codigoDe(await d.detect(cv));
+          if (code && !scanBusy) { scanBusy = true; navigator.vibrate?.(80); buscarCodigo(code); return; }
+        }
+      } catch (e) { /* cuadro no listo */ }
+      scanTimer = setTimeout(loop, 120);
+    };
+    loop();
   } catch (e) {
-    scanner = null;
-    setScanMsg('No se pudo abrir la cámara (revisa que la app tenga permiso de cámara). Puedes leer el código desde una foto o escribirlo.');
+    stopScanner();
+    setScanMsg(e && e.name === 'NotAllowedError'
+      ? 'La app no tiene permiso para usar la cámara. Actívalo en Ajustes del iPhone, o lee el código desde una foto o escríbelo.'
+      : 'No se pudo abrir la cámara. Puedes leer el código desde una foto o escribirlo.');
   }
 }
 async function buscarCodigo(raw) {
@@ -716,7 +762,7 @@ async function buscarCodigo(raw) {
     toast('Ya lo tenías en Mis alimentos');
     return;
   }
-  setScanMsg(`Buscando el código ${code}…`);
+  setScanMsg(`Código ${code} leído. Buscando el producto…`);
   let draft;
   try {
     const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_es,generic_name,brands,quantity,serving_size,serving_quantity,nutriments`);
@@ -729,20 +775,33 @@ async function buscarCodigo(raw) {
   Object.assign(sheet, { scan: false, custom: true, draft });
   renderSheet();
 }
+async function imagenDeArchivo(file) {
+  try { return await createImageBitmap(file); } catch (e) { /* formato no soportado: usa <img> */ }
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const k = Math.min(1, 2000 / Math.max(img.naturalWidth, img.naturalHeight));
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(img.naturalWidth * k); cv.height = Math.round(img.naturalHeight * k);
+    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+    return cv;
+  } finally { URL.revokeObjectURL(url); }
+}
 async function leerFoto(file) {
   setScanMsg('Leyendo la foto…');
   try {
     await stopScanner();
-    await cargarLectorCB();
-    const h = new window.Html5Qrcode('reader', { formatsToSupport: formatosCB(), verbose: false });
-    const code = await h.scanFile(file, false);
-    try { h.clear(); } catch (e) { /* nada */ }
+    const d = await getDetector();
+    const code = codigoDe(await d.detect(await imagenDeArchivo(file)));
+    if (!code) throw new Error('sin código');
     buscarCodigo(code);
   } catch (e) {
-    setScanMsg('No encontré un código en la foto. Prueba con una más cercana y nítida, o escribe los números.');
+    setScanMsg('No encontré un código en la foto. Prueba con una más cercana, nítida y con el código derecho, o escribe los números.');
   }
 }
-const scanHTML = () => `<div id="reader" class="reader"></div>
+const scanHTML = () => `<div id="reader" class="reader"><video playsinline muted autoplay></video><div class="aim"><i></i></div></div>
   <p class="small muted center" id="scanmsg">Apunta la cámara al código de barras del envase.</p>
   <div class="inline"><input id="bcmanual" type="text" inputmode="numeric" placeholder="o escribe el código" aria-label="Código de barras"><button class="btn" data-act="bcbuscar">Buscar</button></div>
   <label class="btn wide">📸 Leer desde una foto<input type="file" accept="image/*" id="bcfoto" hidden></label>
@@ -919,7 +978,7 @@ function vMas() {
       <p class="small"><b>Android (Chrome):</b> menú ⋮ → <i>Instalar aplicación</i> o <i>Agregar a pantalla principal</i>.<br><b>iPhone (Safari):</b> botón Compartir ⬆️ → <i>Agregar a inicio</i>.<br>Una vez instalada funciona sin internet (los videos sí requieren conexión).</p></div>
     <div class="card small-card"><h3>⚠️ Precauciones</h3><p class="small">Antes de empezar, idealmente hazte un chequeo médico general (presión, ECG si tienes antecedentes). Detén el ejercicio si sientes dolor en el pecho, mareo intenso o falta de aire desproporcionada. Dolor articular punzante = detente y ajusta.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">v1.3 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">v1.3.1 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 
