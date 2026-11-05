@@ -406,7 +406,7 @@ function vWizard(first) {
       <h3 class="mt">Minutos por sesión</h3><div class="chips2">${[[30, '30 min'], [45, '45 min'], [60, '60 min']].map(([v, l]) => chip('dur', v, l)).join('')}</div>`;
   } else if (paso === 4) {
     body = `<h2>Cuidados</h2><p class="small muted">¿Tienes molestias o lesiones? Evitaremos los ejercicios que las empeoran y sumaremos los que ayudan.</p>
-      <div class="chips">${PERFIL_OPC.limitaciones.map(([v, l]) => chip('limit', v, l, true)).join('')}<button type="button" class="chip ${w.limit.length ? '' : 'on'}" data-act="wzset" data-f="limit" data-v="__none">✅ Ninguna</button></div>
+      <div class="chips">${PERFIL_OPC.limitaciones.map(([v, l]) => chip('limit', v, l, true)).join('')}<button type="button" class="chip ${w.limit.length ? '' : 'on'}" data-act="wzset" data-f="limit" data-v="__none">${ICO.ok} Ninguna</button></div>
       <label class="mt">Fecha de inicio del plan<input data-wz="inicio" type="date" value="${esc(w.inicio)}"></label>
       ${num(w.edad) < 18 ? '<div class="infobanner mt">Como eres menor de 18, la app no aplicará déficit de calorías: en crecimiento lo importante es comer bien y moverse. Ante dudas, consulta a un médico o nutricionista.</div>' : ''}
       <p class="small muted">Si tienes alguna condición médica (corazón, presión, diabetes), consulta a tu médico antes de empezar.</p>`;
@@ -1144,7 +1144,7 @@ function vMas() {
       <p class="small"><b>Android (Chrome):</b> menú ⋮ → <i>Instalar aplicación</i> o <i>Agregar a pantalla principal</i>.<br><b>iPhone (Safari):</b> botón Compartir ⬆️ → <i>Agregar a inicio</i>.<br>Una vez instalada funciona sin internet (los videos sí requieren conexión).</p></div>
     <div class="card small-card"><h3>⚠️ Precauciones</h3><p class="small">Antes de empezar, idealmente hazte un chequeo médico general (presión, ECG si tienes antecedentes). Detén el ejercicio si sientes dolor en el pecho, mareo intenso o falta de aire desproporcionada. Dolor articular punzante = detente y ajusta.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">v1.6 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">v1.6.1 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 

@@ -524,3 +524,14 @@ input[type=range] { accent-color: var(--acc); }
 .libi.nodisp { opacity: .45; }
 .wrap > .seg { margin-bottom: 4px; }
 .btn:disabled { opacity: .4; box-shadow: none; }
+
+/* v1.6.1: íconos de implementos */
+.ico { width: 20px; height: 20px; vertical-align: -5px; margin-right: 4px; flex: none; }
+.chip .ico { color: var(--acc); }
+.chip.on .ico { color: var(--on-acc); }
+.ico .ico-dot { stroke: #ff3b4f; }
+.chip.on .ico .ico-dot { stroke: #fff; }
+.ico-cuerpo { width: 24px; height: 24px; vertical-align: -7px; }
+.chip .ico-cuerpo { color: var(--mut); }
+.chip.on .ico-cuerpo { color: rgba(255, 255, 255, .8); }
+.ico-cuerpo .ico-dot, .chip.on .ico-cuerpo .ico-dot { stroke: #ffd60a; }

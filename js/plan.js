@@ -272,6 +272,26 @@ const META = {
   rueda_abdominal: { eq: 'rueda', lvl: 1, no: ['espalda', 'hombros'] }, remo_trx: { eq: 'trx', lvl: 0 },
 };
 
+/* ---------- Íconos de implementos (SVG de línea, mismo estilo) ---------- */
+const svgIco = (d, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const ICO = {
+  mancuernas: svgIco('<rect x="3.5" y="8" width="3.5" height="8" rx="1"/><rect x="17" y="8" width="3.5" height="8" rx="1"/><path d="M7 12h10M1.8 10.5v3M22.2 10.5v3"/>'),
+  barra: svgIco('<rect x="4" y="5" width="3" height="14" rx="1"/><rect x="17" y="5" width="3" height="14" rx="1"/><rect x="7.6" y="8" width="2" height="8" rx=".8"/><rect x="14.4" y="8" width="2" height="8" rx=".8"/><path d="M1 12h3M9.6 12h4.8M20 12h3"/>'),
+  banco: svgIco('<rect x="2.5" y="8" width="19" height="3.2" rx="1.6"/><path d="M6 11.2V19M18 11.2V19M4 19h4M16 19h4M12 11.2v3"/>'),
+  bandas: svgIco('<ellipse cx="12" cy="12" rx="9.5" ry="5.2"/><ellipse cx="12" cy="12" rx="6.2" ry="2.6"/>'),
+  dominadas: svgIco('<path d="M4 21V3.5M20 21V3.5M2.5 7h19"/><path d="M8.5 7v3.2M15.5 7v3.2"/>'),
+  kettlebell: svgIco('<path d="M8.6 9.6a3.4 3.4 0 1 1 6.8 0"/><path d="M7.2 21h9.6a2 2 0 0 0 2-2.3l-.6-4.4a5.2 5.2 0 0 0-5.1-4.4h-2.2a5.2 5.2 0 0 0-5.1 4.4l-.6 4.4a2 2 0 0 0 2 2.3z"/>'),
+  cuerda: svgIco('<path d="M6 14C6 2.5 18 2.5 18 14"/><rect x="4.4" y="14" width="3.2" height="6.5" rx="1.2"/><rect x="16.4" y="14" width="3.2" height="6.5" rx="1.2"/>'),
+  trx: svgIco('<circle cx="12" cy="3" r="1.4"/><path d="M12 4.4v2.4M12 6.8 6.5 17M12 6.8 17.5 17"/><path d="M4.2 17.5h4.6M15.2 17.5h4.6"/>'),
+  rueda: svgIco('<circle cx="12" cy="13" r="6.2"/><circle cx="12" cy="13" r="1.6"/><path d="M1.8 13h4M18.2 13h4"/>'),
+  eliptica: svgIco('<path d="M2.5 20.5h19"/><path d="M16.5 20.5 14.2 4.5M11.5 4.5h5.2"/><ellipse cx="8.5" cy="15.5" rx="5" ry="2.3"/><path d="M8.5 13.2V9.5"/>'),
+  trotadora: svgIco('<path d="M2 18.5h15.5a2.5 2.5 0 0 0 2.4-1.8l.6-2"/><path d="M17.5 14.5 15.6 4.5h5"/><circle cx="4.5" cy="18.5" r="1.4"/><circle cx="14" cy="18.5" r="1.4"/>'),
+  bicicleta: svgIco('<path d="M5.5 5.5h4.5"/><path d="M8 5.5l3.2 9.5"/><path d="M11.2 15l4.3-9.5h3.2"/><circle cx="16" cy="15.5" r="3.2"/><path d="M11.2 15v5.5M4.5 20.5h15"/>'),
+  // figura humana con la zona marcada (para molestias)
+  cuerpo: (zona) => svgIco(`<circle cx="12" cy="3.6" r="2"/><path d="M12 5.8v6.8M12 7.6 7 12.4M12 7.6l5 4.8M12 12.6l-2.8 8.4M12 12.6l2.8 8.4"/><path d="${zona}h.01" class="ico-dot" stroke-width="5.5"/>`, 'ico-cuerpo'),
+  ok: svgIco('<path d="M4.5 12.5l4.5 4.5L19.5 6.5"/>'),
+};
+
 /* ---------- Opciones del perfil ---------- */
 const PERFIL_OPC = {
   objetivos: [
@@ -294,12 +314,15 @@ const PERFIL_OPC = {
     ['avanzado', 'Avanzado', 'Entreno seguido hace años'],
   ],
   equipo: [
-    ['mancuernas', '🏋️', 'Mancuernas'], ['barra', '➖', 'Barra y discos'], ['banco', '🛋️', 'Banco'],
-    ['bandas', '🎗️', 'Bandas elásticas'], ['dominadas', '🚪', 'Barra de dominadas'], ['kettlebell', '🔔', 'Kettlebell'],
-    ['cuerda', '🪢', 'Cuerda para saltar'], ['trx', '🔗', 'TRX / suspensión'], ['rueda', '⚙️', 'Rueda abdominal'],
-    ['eliptica', '🚴', 'Elíptica'], ['trotadora', '🏃', 'Trotadora'], ['bicicleta', '🚲', 'Bicicleta estática'],
+    ['mancuernas', ICO.mancuernas, 'Mancuernas'], ['barra', ICO.barra, 'Barra y discos'], ['banco', ICO.banco, 'Banco'],
+    ['bandas', ICO.bandas, 'Bandas elásticas'], ['dominadas', ICO.dominadas, 'Barra de dominadas'], ['kettlebell', ICO.kettlebell, 'Kettlebell'],
+    ['cuerda', ICO.cuerda, 'Cuerda para saltar'], ['trx', ICO.trx, 'TRX / suspensión'], ['rueda', ICO.rueda, 'Rueda abdominal'],
+    ['eliptica', ICO.eliptica, 'Elíptica'], ['trotadora', ICO.trotadora, 'Trotadora'], ['bicicleta', ICO.bicicleta, 'Bicicleta estática'],
   ],
-  limitaciones: [['rodillas', '🦵 Rodillas'], ['espalda', '🔙 Espalda baja'], ['hombros', '💪 Hombros'], ['munecas', '✋ Muñecas']],
+  limitaciones: [
+    ['rodillas', `${ICO.cuerpo('M10.6 17.2')} Rodillas`], ['espalda', `${ICO.cuerpo('M12 11.6')} Espalda baja`],
+    ['hombros', `${ICO.cuerpo('M14.6 7.6')} Hombros`], ['munecas', `${ICO.cuerpo('M17.4 12.4')} Muñecas`],
+  ],
 };
 const NIVEL_N = { principiante: 0, intermedio_bajo: 1, intermedio: 2, avanzado: 3 };
 const EQUIPO_GYM = ['mancuernas', 'barra', 'banco', 'rack', 'maquinas', 'poleas', 'dominadas', 'kettlebell', 'bandas', 'cuerda', 'trx', 'rueda', 'eliptica', 'trotadora', 'bicicleta'];
