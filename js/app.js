@@ -9,9 +9,9 @@ const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'o
 function load() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY));
-    if (s && typeof s === 'object') return { perfil: null, logs: {}, pesos: [], caminatas: [], comidas: {}, propios: [], rutinas: [], ejPropios: [], ...s };
+    if (s && typeof s === 'object') return { perfil: null, logs: {}, pesos: [], caminatas: [], comidas: {}, propios: [], rutinas: [], ejPropios: [], reemplazos: [], descargas: {}, medidas: [], ajustes: {}, ...s };
   } catch (e) { /* sin almacenamiento */ }
-  return { perfil: null, logs: {}, pesos: [], caminatas: [], comidas: {}, propios: [], rutinas: [], ejPropios: [] };
+  return { perfil: null, logs: {}, pesos: [], caminatas: [], comidas: {}, propios: [], rutinas: [], ejPropios: [], reemplazos: [], descargas: {}, medidas: [], ajustes: {} };
 }
 let S = load();
 // Perfiles creados antes del perfilamiento (v1) corresponden al plan original: se completan con esos valores
@@ -22,12 +22,14 @@ function migrarPerfil() {
   try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* sin almacenamiento */ }
 }
 migrarPerfil();
-let _plan = null, _planKey = '';
-function PLAN() {
+const _planes = {};
+const cicloHoy = () => (S.perfil?.inicio ? weekInfo(today()).ciclo : 1);
+// cada ciclo de 12 semanas rota los ejercicios (ciclo 1 = plan base)
+function PLAN(ciclo = cicloHoy()) {
   const p = S.perfil || {};
-  const k = JSON.stringify([p.objetivo, p.dias, p.lugar, p.equipo, p.nivel, p.dur, p.limit]);
-  if (k !== _planKey) { _plan = generarPlan(p); _planKey = k; }
-  return _plan;
+  const k = JSON.stringify([p.objetivo, p.dias, p.lugar, p.equipo, p.nivel, p.dur, p.limit, ciclo]);
+  if (!_planes[k]) _planes[k] = generarPlan(p, ciclo);
+  return _planes[k];
 }
 let saveT;
 function save(now) {
@@ -159,7 +161,8 @@ function getSes(sid) {
 const nombreSes = (l) => getSes(l.sid)?.nombre || l.nombre || 'Sesión';
 
 /* ---------- Sesiones ---------- */
-function itemsDe(sid, wi) {
+const reemplazoDe = (id, date) => (S.reemplazos || []).find((r) => r.de === id && date >= r.desde)?.a;
+function itemsDe(sid, wi, date) {
   const out = [];
   const rut = getRutina(sid);
   if (rut) {
@@ -169,24 +172,88 @@ function itemsDe(sid, wi) {
       out.push({ k: 'ex', id: e.id, sets: Math.max(1, num(e.sets) || 3), reps: esTiempo(getEj(e.id)) && /^\d+(\s*-\s*\d+)?$/.test(reps) ? reps + ' s' : reps, rest: num(e.rest) || 60 });
     }
     if (num(rut.cardio)) out.push({ k: 'cardio', key: 'libre', rx: { titulo: `${PLAN().cardio.label} · ${num(rut.cardio)} min`, min: num(rut.cardio), detalle: 'Ritmo a elección (zona 2 recomendada).', zona: 'z2' } });
-    return out;
+  } else {
+    const PL = PLAN(wi.ciclo), ses = PL.ses[sid];
+    if (!ses) return out;
+    const aj = date ? ajusteSesion(date, sid) : { menos: 0 };
+    const desc = wi.deload || !!(S.descargas || {})[wi.week];
+    const prec = !!S.perfil?.precaucion;
+    for (const b of ses.bloques) {
+      if (b.tipo === 'calentamiento') out.push({ k: 'warm', corto: !!b.corto });
+      else if (b.tipo === 'ej') {
+        const r = b.rx[wi.phase - 1];
+        if (r) out.push({ k: 'ex', id: b.id, sets: Math.max(1, (desc ? Math.max(2, r[0] - 1) : r[0]) - aj.menos), reps: r[1], rest: r[2] });
+      } else if (b.tipo === 'cardio') {
+        const kind = prec && b.kind === 'intervalos' ? 'z2' : b.kind;
+        out.push({ k: 'cardio', key: b.kind, rx: cardioRx(kind, wi.wk, PL.cardio, PL.cardioF) });
+      } else if (b.tipo === 'circuito') {
+        const i = wi.phase - 1;
+        const rondas = Math.max(1, (desc ? b.rondas[i] - 1 : b.rondas[i]) - aj.menos);
+        const ejs = b.ejercicios.filter((e) => e.fases.includes(wi.phase));
+        out.push({ k: 'circ', rondas, trabajo: b.trabajo[i], pausa: b.pausa[i], entre: b.entreRondas[i], nEj: ejs.length });
+        for (const e of ejs) out.push({ k: 'ex', id: e.id, sets: rondas, reps: b.trabajo[i], rest: b.pausa[i], circ: true });
+      }
+    }
   }
-  for (const b of PLAN().ses[sid].bloques) {
-    if (b.tipo === 'calentamiento') out.push({ k: 'warm', corto: !!b.corto });
-    else if (b.tipo === 'ej') {
-      const r = b.rx[wi.phase - 1];
-      if (r) out.push({ k: 'ex', id: b.id, sets: wi.deload ? Math.max(2, r[0] - 1) : r[0], reps: r[1], rest: r[2] });
-    } else if (b.tipo === 'cardio') out.push({ k: 'cardio', key: b.kind, rx: cardioRx(b.kind, wi.wk, PLAN().cardio, PLAN().cardioF) });
-    else if (b.tipo === 'circuito') {
-      const i = wi.phase - 1;
-      const rondas = wi.deload ? b.rondas[i] - 1 : b.rondas[i];
-      out.push({ k: 'circ', rondas, trabajo: b.trabajo[i], pausa: b.pausa[i], entre: b.entreRondas[i] });
-      for (const e of b.ejercicios) {
-        if (e.fases.includes(wi.phase)) out.push({ k: 'ex', id: e.id, sets: rondas, reps: b.trabajo[i], rest: b.pausa[i], circ: true });
+  // cambios de ejercicio: los de esta sesión y los "usar siempre"
+  if (date) {
+    const lg = S.logs[`${date}|${sid}`];
+    for (const it of out) {
+      if (it.k !== 'ex') continue;
+      const a2 = lg?.subs?.[it.id] || reemplazoDe(it.id, date);
+      if (a2 && a2 !== it.id && (EJERCICIOS[a2] || S.ejPropios.some((e) => e.id === a2))) {
+        it.orig = it.id; it.id = a2;
+        // si cambia de repeticiones a tiempo (o al revés), usa una prescripción acorde
+        const enSeg = /s\s*$/.test(String(it.reps));
+        if (esTiempo(getEj(a2)) && !enSeg) it.reps = '30 s';
+        else if (!esTiempo(getEj(a2)) && enSeg && !it.circ) it.reps = '10-12';
       }
     }
   }
   return out;
+}
+// Ajuste automático según la última sesión, días sin entrenar y esfuerzo acumulado
+function ajusteSesion(date, sid) {
+  const res = { menos: 0, factor: 1, msgs: [], sugDescarga: false };
+  const prev = logsOrdenados().filter((l) => l.done && l.fecha < date);
+  if (!prev.length) return res;
+  const dias = dayDiff(prev[prev.length - 1].fecha, date);
+  const mismo = [...prev].reverse().find((l) => l.sid === sid);
+  if (dias >= 10) {
+    res.menos = 1; res.factor = 0.9;
+    res.msgs.push(`Vuelves después de ${dias} días: hoy 1 serie menos y ~10% menos peso para retomar sin lesiones.`);
+  } else if (mismo && mismo.rodilla >= 5) {
+    res.factor = 0.9;
+    res.msgs.push(`La última vez marcaste molestia ${mismo.rodilla}/10: baja ~10% el peso y acorta el rango donde moleste. Si sigue, cambia el ejercicio (↔).`);
+  } else if (mismo && mismo.rpe >= 9) {
+    res.factor = 0.9;
+    res.msgs.push('La última vez esta sesión fue muy dura (esfuerzo 9-10): hoy baja ~10% el peso.');
+  } else if (mismo && mismo.rpe <= 4) {
+    res.msgs.push('La última vez fue fácil: si completas las series, sube el peso sin miedo.');
+  }
+  const wi = weekInfo(date);
+  const rec = prev.filter((l) => dayDiff(l.fecha, date) <= 14);
+  if (rec.length >= 4 && rec.reduce((x, l) => x + (l.rpe || 6), 0) / rec.length >= 8.5 && !wi.deload && !(S.descargas || {})[wi.week]) res.sugDescarga = true;
+  return res;
+}
+const e1rm = (w, r) => (r <= 1 ? w : w * (1 + Math.min(r, 12) / 30));
+function esRecord(id, set) {
+  const w = num(set.w), r = num(set.r);
+  if (!r) return null;
+  const ex = getEj(id);
+  let best = 0;
+  for (const l of Object.values(S.logs)) {
+    for (const x of l.ex[id]?.sets || []) {
+      if (x === set || !x.ok) continue;
+      best = Math.max(best, usaPeso(ex) && w ? (num(x.w) ? e1rm(num(x.w), num(x.r) || 0) : 0) : num(x.r) || 0);
+    }
+  }
+  if (!best) return null;
+  if (usaPeso(ex) && w) {
+    const e = e1rm(w, r);
+    return e > best + 0.05 ? `🏆 ¡Récord en ${ex.nombre}! Fuerza estimada (1RM): ${fmtN(e)} kg` : null;
+  }
+  return r > best ? `🏆 ¡Récord de ${esTiempo(ex) ? 'tiempo' : 'repeticiones'} en ${ex.nombre}!` : null;
 }
 const logKey = (date, sid) => `${date}|${sid}`;
 function getLog(date, sid, create) {
@@ -336,7 +403,7 @@ function header(title, back) {
 
 /* ---- Perfilamiento (asistente) ---- */
 let wz = null, wzPaso = 0;
-const WZ_PASOS = ['Tus datos', 'Objetivo', 'Dónde', 'Tiempo', 'Cuidados', 'Tu plan'];
+const WZ_PASOS = ['Tus datos', 'Objetivo', 'Dónde', 'Tiempo', 'Cuidados', 'Salud', 'Tu plan'];
 function wzInit() {
   const p = S.perfil || {};
   wz = {
@@ -344,6 +411,7 @@ function wzInit() {
     metaMin: p.metaMin ?? '', metaMax: p.metaMax ?? '', objetivo: p.objetivo || '', actividad: p.actividad || 'ligero',
     nivel: p.nivel || '', lugar: p.lugar || '', equipo: [...(p.equipo || [])], mancMax: p.mancMax ?? '',
     dias: [...(p.dias || [])], dur: p.dur || 45, limit: [...(p.limit || [])], inicio: p.inicio || today(),
+    parq: p.parq?.resp ? [...p.parq.resp] : PARQ.map(() => null), embarazo: p.parq?.embarazo ?? null,
   };
   wzPaso = 0;
 }
@@ -357,6 +425,8 @@ function perfilDesdeWz() {
     objetivo: w.objetivo, actividad: w.actividad, nivel: w.nivel, lugar: w.lugar,
     equipo: w.lugar === 'casa' ? w.equipo : [], mancMax: num(w.mancMax),
     dias: [...w.dias].sort((x, y) => ((x + 6) % 7) - ((y + 6) % 7)), dur: w.dur, limit: w.limit, inicio: w.inicio || today(),
+    parq: { resp: w.parq, embarazo: necesitaEmbarazo(w) ? w.embarazo : null, fecha: today() },
+    precaucion: w.parq.some((x) => x === true) || (necesitaEmbarazo(w) && w.embarazo === true),
   };
 }
 function wzValidar() {
@@ -368,6 +438,7 @@ function wzValidar() {
   }
   if (wzPaso === 1 && !w.objetivo) return 'Elige tu objetivo';
   if (wzPaso === 2 && !w.lugar) return 'Elige dónde entrenas';
+  if (wzPaso === 5) return parqCompleto(w);
   if (wzPaso === 3) {
     if (!w.nivel) return 'Elige tu nivel';
     if (w.dias.length < 2 || w.dias.length > 6) return 'Elige entre 2 y 6 días';
@@ -410,6 +481,8 @@ function vWizard(first) {
       <label class="mt">Fecha de inicio del plan<input data-wz="inicio" type="date" value="${esc(w.inicio)}"></label>
       ${num(w.edad) < 18 ? '<div class="infobanner mt">Como eres menor de 18, la app no aplicará déficit de calorías: en crecimiento lo importante es comer bien y moverse. Ante dudas, consulta a un médico o nutricionista.</div>' : ''}
       <p class="small muted">Si tienes alguna condición médica (corazón, presión, diabetes), consulta a tu médico antes de empezar.</p>`;
+  } else if (paso === 5) {
+    body = parqBody(w);
   } else {
     const tp = perfilDesdeWz(), pl = generarPlan(tp), o = objetivos(tp, num(w.peso));
     const obj = PERFIL_OPC.objetivos.find((x) => x[0] === tp.objetivo);
@@ -478,6 +551,8 @@ function vHoy() {
   return `${header(p.nombre ? `¡A darle, ${esc(p.nombre.split(' ')[0])}! 🔥` : '¡A darle! 🔥')}
   <section class="wrap">
     <div class="weekline"><span class="pill">Semana ${wi.antes ? 0 : wi.wk}${wi.ciclo > 1 ? ` · ciclo ${wi.ciclo}` : ''} de 12</span><span class="pill soft">Fase ${wi.phase}: ${FASES[wi.phase - 1].nombre}</span>${wi.deload ? '<span class="pill warn">Semana de descarga</span>' : ''}</div>
+    ${!p.parq ? '<a class="card row-link nuevo" href="#/salud"><span>🩺</span><div class="grow"><b>Completa tu cuestionario de salud</b><span class="small muted">7 preguntas, 1 minuto. Para entrenar seguro.</span></div>›</a>' : ''}
+    ${p.precaucion ? '<a class="card row-link" href="#/salud"><span>🩺</span><div class="grow"><b>Modo precaución activo</b><span class="small muted">Consulta a tu médico antes de subir la intensidad.</span></div>›</a>' : ''}
     ${p.revisar ? '<a class="card row-link nuevo" href="#/perfil"><span>✨</span><div class="grow"><b>Nuevo: personaliza tu plan</b><span class="small muted">Objetivo, dónde entrenas, equipo y días. Si no cambias nada, tu plan sigue igual.</span></div>›</a>' : ''}
     ${main}
     <div class="card"><h3>Esta semana</h3><div class="weekdots" style="grid-template-columns:repeat(${PL.orden.length},1fr)">${dots}</div>
@@ -505,11 +580,16 @@ function vSesion(date, sid) {
   const ses = getSes(sid);
   if (!ses) return vHoy();
   const wi = weekInfo(date);
-  const items = itemsDe(sid, wi);
+  const items = itemsDe(sid, wi, date);
   const lg = getLog(date, sid, false);
   const fz = fcZonas();
+  const aj = getRutina(sid) ? { msgs: [], factor: 1 } : ajusteSesion(date, sid);
+  const desc = wi.deload || !!(S.descargas || {})[wi.week];
   let html = `${header(ses.nombre, '#/hoy')}<section class="wrap ses">
-    <p class="muted center">${fmt(date, true)} · Semana ${wi.wk} · Fase ${wi.phase}${wi.deload ? ' · <b>descarga</b> (1 serie menos, pesos cómodos)' : ''}</p>
+    <p class="muted center">${fmt(date, true)} · Semana ${wi.wk} · Fase ${wi.phase}${wi.ciclo > 1 ? ` · Ciclo ${wi.ciclo}` : ''}${desc ? ' · <b>descarga</b> (1 serie menos, pesos cómodos)' : ''}</p>
+    ${aj.msgs.map((m) => `<div class="hint ajuste">🧠 ${m}</div>`).join('')}
+    ${aj.sugDescarga ? `<div class="hint warn">Llevas 2 semanas muy exigentes. Una semana de descarga ayuda a recuperar y seguir progresando. <button class="link" data-act="descarga" data-w="${wi.week}">Activar descarga esta semana</button></div>` : ''}
+    ${S.perfil?.precaucion ? '<div class="hint warn">🩺 Modo precaución (cuestionario de salud): los intervalos intensos se cambian por cardio suave. Consulta a tu médico.</div>' : ''}
     <div class="hint">Toca <b>✓</b> al terminar cada serie: se guarda y parte el descanso. Si dejas el peso/reps vacíos se usan los sugeridos.</div>`;
 
   for (const it of items) {
@@ -517,7 +597,8 @@ function vSesion(date, sid) {
       const list = CALENTAMIENTO[it.corto ? 'corto' : 'normal'].map((x) => x.replace('cardio', PLAN().cardio.label.toLowerCase()));
       html += `<div class="card blk ${lg?.warm ? 'done' : ''}" id="warm"><div class="blk-h"><h3>🔥 Calentamiento</h3><button class="chk ${lg?.warm ? 'on' : ''}" data-act="warm" aria-label="Marcar calentamiento">✓</button></div><ul class="ticks">${list.map((x) => `<li>${x}</li>`).join('')}</ul></div>`;
     } else if (it.k === 'circ') {
-      html += `<div class="card circ"><h3>⚡ Circuito · ${it.rondas} rondas</h3><p>Haz los ejercicios <b>seguidos</b>: ${it.trabajo} de trabajo y ${it.pausa} s de pausa entre ejercicios. Descansa <b>${it.entre} s</b> al terminar cada ronda. Anota el peso y las reps (o segundos) que lograste en cada ronda.</p></div>`;
+      html += `<div class="card circ"><h3>⚡ Circuito · ${it.rondas} rondas</h3><p>Haz los ejercicios <b>seguidos</b>: ${it.trabajo} de trabajo y ${it.pausa} s de pausa entre ejercicios. Descansa <b>${it.entre} s</b> al terminar cada ronda. Anota el peso y las reps (o segundos) que lograste en cada ronda.</p>
+        <a class="btn small-btn" href="#/timer/c/${rango(it.trabajo)[0]}/${it.pausa}/${it.rondas * it.nEj}">⏱ Abrir temporizador del circuito</a></div>`;
     } else if (it.k === 'cardio') {
       const c = lg?.cardio?.[it.key] || {};
       const zona = it.rx.zona === 'int' ? `Suave: ${fz.z2[0]}–${fz.z2[1]} lpm · Fuerte: ${fz.fuerte[0]}–${fz.fuerte[1]} lpm` : `Zona 2: ${fz.z2[0]}–${fz.z2[1]} lpm`;
@@ -537,7 +618,11 @@ function vSesion(date, sid) {
     } else {
       const ex = getEj(it.id);
       const last = ultimaVez(it.id, date);
-      const sug = sugerencia(it.id, it, last);
+      let sug = sugerencia(it.id, it, last);
+      if (aj.factor < 1 && sug.w && usaPeso(ex)) {
+        const w2 = Math.round(sug.w * aj.factor * 2) / 2;
+        sug = { w: w2, txt: `Ajuste de hoy: ${fmtN(w2)} kg (−10%).` };
+      }
       const sets = lg?.ex?.[it.id]?.sets || [];
       const n = Math.max(it.sets, sets.length);
       const [, hi] = rango(it.reps);
@@ -556,7 +641,8 @@ function vSesion(date, sid) {
       html += `<div class="card blk ex ${allOk ? 'done' : ''} ${it.circ ? 'incirc' : ''}" data-exc="${it.id}" data-sets="${it.sets}">
         <div class="blk-h"><div class="thumb" data-act="tech" data-id="${it.id}">${Fig.still(ANIMS[it.id]) || '<div class="noanim">🏋️</div>'}</div>
           <div class="grow"><h3>${esc(ex.nombre)}</h3><p class="rx">${it.circ ? `${it.sets} rondas × ${it.reps}` : `${it.sets} × ${it.reps}${ex.porLado ? ' por lado' : ''} · descanso ${it.rest} s`}</p>
-          <button class="link" data-act="tech" data-id="${it.id}">▶ Ver técnica</button></div></div>
+          <div class="exlinks"><button class="link" data-act="tech" data-id="${it.id}">▶ Ver técnica</button><button class="link" data-act="subopen" data-id="${it.id}" data-orig="${it.orig || it.id}">↔ Cambiar</button></div>
+          ${it.orig ? `<p class="small muted">En lugar de ${esc(getEj(it.orig).nombre)} · <button class="link small" data-act="subundo" data-orig="${it.orig}">volver al original</button></p>` : ''}</div></div>
         <div class="tech" id="tech-${it.id}"></div>
         ${lastTxt ? `<p class="last">${esc(lastTxt)}</p>` : ''}
         <p class="sug ${sug.up ? 'up' : ''}">${sug.up ? '⬆️ ' : '💡 '}${sug.txt}</p>
@@ -573,7 +659,7 @@ function vSesion(date, sid) {
     <p class="small muted">Regla: hasta 3/10 durante el ejercicio es aceptable si al día siguiente no está peor. Si pasa de 3, reduce rango o peso.</p>
     <label>Notas<textarea data-fin="notas" rows="2" placeholder="¿Cómo te sentiste? ¿Algo molestó?">${esc(lg?.notas || '')}</textarea></label>
     <button class="btn primary big" data-act="finish">${lg?.done ? 'Guardar cambios' : 'Terminar sesión ✓'}</button>
-  </div></section>`;
+  </div></section><div id="modal" class="sheet"></div>`;
   return html;
 }
 
@@ -590,7 +676,7 @@ function vPlan() {
       return `<div class="pday rest ${d === t ? 'now' : ''}"><div class="pd"><b>${DIAS[dow].slice(0, 3)}</b><span>${fmt(d)}</span></div><div class="grow muted small">Descanso · opcional: caminata 20-40 min (regístrala en Hoy)</div></div>`;
     }
     const ses = PLAN().ses[sid], ok = doneEnSemana(week, sid);
-    const its = itemsDe(sid, wi);
+    const its = itemsDe(sid, wi, d);
     const cardio = its.filter((x) => x.k === 'cardio').map((x) => x.rx.titulo).join(' + ');
     const nEj = its.filter((x) => x.k === 'ex').length;
     return `<a class="pday ${ok ? 'ok' : ''} ${d === t ? 'now' : ''}" href="#/sesion/${d}/${sid}"><div class="pd"><b>${DIAS[dow].slice(0, 3)}</b><span>${fmt(d)}</span></div>
@@ -650,11 +736,12 @@ function vProgreso() {
     const conPeso = usaPeso(ex) && L.some((l) => l.ex[ejSel]?.sets.some((s) => s.ok && num(s.w)));
     const pts = L.filter((l) => l.ex[ejSel]?.sets.some((s) => s.ok)).map((l) => {
       const ok = l.ex[ejSel].sets.filter((s) => s.ok);
-      return { x: +parse(l.fecha), y: conPeso ? Math.max(...ok.map((s) => num(s.w) || 0)) : Math.max(...ok.map((s) => num(s.r) || 0)), t: fmt(l.fecha) };
+      return { x: +parse(l.fecha), y: conPeso ? (progModo === '1rm' ? r1(Math.max(...ok.map((s) => e1rm(num(s.w) || 0, num(s.r) || 0)))) : Math.max(...ok.map((s) => num(s.w) || 0))) : Math.max(...ok.map((s) => num(s.r) || 0)), t: fmt(l.fecha) };
     });
     const best = Math.max(...pts.map((x) => x.y));
     ejChart = `<select data-act-change="ejsel">${conEj.map((id) => `<option value="${id}" ${id === ejSel ? 'selected' : ''}>${esc(getEj(id).nombre)}</option>`).join('')}</select>
-      <p class="small muted">${conPeso ? 'Peso máximo por sesión (kg)' : esTiempo(ex) ? 'Mejor tiempo (s)' : 'Máximo de reps'} · récord: <b>${best}</b></p>${chartLine(pts, { label: 'progreso ejercicio', dec: true })}`;
+      ${conPeso ? `<div class="seg"><button class="${progModo === '1rm' ? '' : 'on'}" data-act="pmodo" data-v="peso">Peso máximo</button><button class="${progModo === '1rm' ? 'on' : ''}" data-act="pmodo" data-v="1rm">Fuerza estimada (1RM)</button></div>` : ''}
+      <p class="small muted">${conPeso ? (progModo === '1rm' ? '1RM estimado por sesión (kg): lo máximo que podrías levantar 1 vez' : 'Peso máximo por sesión (kg)') : esTiempo(ex) ? 'Mejor tiempo (s)' : 'Máximo de reps'} · récord: <b>${fmtN(best)}</b></p>${chartLine(pts, { label: 'progreso ejercicio', dec: true })}`;
   }
   const rod = L.filter((l) => l.done).map((l) => ({ x: +parse(l.fecha), y: l.rodilla || 0, t: fmt(l.fecha) }));
   const totalMin = Object.values(S.logs).reduce((s, l) => s + Object.values(l.cardio || {}).reduce((a, c) => a + (num(c.min) || 0), 0), 0) + minCaminatas(S.caminatas);
@@ -682,9 +769,56 @@ function vProgreso() {
       <p class="small muted">Total: <b>${cams.length}</b> caminatas · <b>${fmtN(sumar(cams, 'km'))} km</b> · <b>${sumar(cams, 'pasos').toLocaleString('es-CL')}</b> pasos</p>
       ${cams.length ? `<details><summary class="small">Ver registros</summary><ul class="plist">${cams.map((c) => `<li><span>${fmt(c.fecha)}</span><b>${resumenCam([c])}</b><button class="link danger" data-act="delcam" data-id="${c.id}" aria-label="Eliminar">✕</button></li>`).join('')}</ul></details>` : ''}
     </div>
-    <div class="card"><h3>🏋️ Fuerza</h3>${ejChart}<p class="small muted">Volumen total levantado: <b>${Math.round(vol).toLocaleString('es-CL')} kg</b></p></div>
+    <div class="card"><h3>🏋️ Fuerza</h3>${ejChart}${recordsHTML(L)}<p class="small muted">Volumen total levantado: <b>${Math.round(vol).toLocaleString('es-CL')} kg</b></p></div>
+    ${volumenHTML(L, cur)}
+    ${medidasHTML(t)}
+    <div class="card"><h3>📸 Fotos de progreso</h3>
+      <div class="inline"><select id="fpose" aria-label="Pose"><option>Frente</option><option>Lado</option><option>Espalda</option></select><label class="btn primary">+ Foto<input type="file" accept="image/*" id="ffoto" hidden></label></div>
+      <div id="fotos" class="fotos"><p class="small muted">Cargando…</p></div>
+      <p class="small muted">Las fotos quedan solo en este teléfono y <b>no se incluyen en el respaldo</b>. Para guardarlas aparte, ábrelas y usa "Compartir".</p></div>
     <div class="card"><h3>🦵 ${tieneLimit('rodillas') ? 'Dolor de rodilla' : 'Molestias articulares'}</h3>${chartLine(rod, { yMin: 0, yMax: 10, label: 'dolor rodilla', vacio: 'Se registra al terminar cada sesión.', h: 130 })}<p class="small muted">Lo ideal es que la tendencia baje con las semanas. Si sube o pasa de 5, consulta a un kinesiólogo.</p></div>
-  </section>`;
+  </section><div id="modal" class="sheet"></div>`;
+}
+let progModo = 'peso', medSel = 'cadera';
+function recordsHTML(L) {
+  const rec = {};
+  for (const l of L) for (const [id, e] of Object.entries(l.ex || {})) for (const s of e.sets) {
+    if (!s.ok || !num(s.r)) continue;
+    const ex = getEj(id), w = num(s.w);
+    const val = usaPeso(ex) && w ? e1rm(w, num(s.r)) : num(s.r);
+    if (!rec[id] || val > rec[id].val) rec[id] = { val, w, r: num(s.r), fecha: l.fecha, peso: usaPeso(ex) && w };
+  }
+  const arr = Object.entries(rec).sort((a, b) => b[1].fecha.localeCompare(a[1].fecha)).slice(0, 10);
+  if (!arr.length) return '';
+  return `<h4>🏆 Récords personales</h4><ul class="plist recs">${arr.map(([id, x]) => `<li><span>${fmt(x.fecha)}</span><b>${esc(getEj(id).nombre)}</b><span>${x.peso ? `${fmtN(x.w)} kg × ${x.r} · <i>1RM ≈ ${fmtN(Math.round(x.val))}</i>` : `${x.r} ${esTiempo(getEj(id)) ? 's' : 'reps'}`}</span></li>`).join('')}</ul>`;
+}
+function volumenHTML(L, week) {
+  const g = {};
+  for (const l of L) {
+    if (l.week !== week) continue;
+    for (const [id, e] of Object.entries(l.ex || {})) {
+      const grupo = GRUPO_DE_PATRON[PATRON[id]];
+      if (grupo) g[grupo] = (g[grupo] || 0) + e.sets.filter((s) => s.ok).length;
+    }
+  }
+  const grupos = ['Piernas', 'Glúteos e isquios', 'Pecho', 'Espalda', 'Hombros', 'Brazos', 'Core'];
+  const meta = S.perfil?.objetivo === 'musculo' ? [10, 20] : [6, 12];
+  const max = Math.max(meta[1], ...Object.values(g));
+  return `<div class="card"><h3>💪 Series por grupo muscular</h3><p class="small muted">Esta semana. Recomendado para tu objetivo: ${meta[0]}–${meta[1]} series por grupo.</p>
+    ${grupos.map((x) => { const n = g[x] || 0; return `<div class="vrow"><span>${x}</span><div class="vbar"><i class="${n >= meta[0] ? 'ok' : ''}" style="width:${(n / max) * 100}%"></i><em style="left:${(meta[0] / max) * 100}%"></em></div><b>${n}</b></div>`; }).join('')}</div>`;
+}
+const MEDIDAS = [['cadera', 'Cadera'], ['pecho', 'Pecho'], ['brazo', 'Brazo'], ['muslo', 'Muslo'], ['grasa', '% grasa']];
+function medidasHTML(t) {
+  const M = [...(S.medidas || [])].sort((a, b) => a.fecha.localeCompare(b.fecha));
+  const pts = M.filter((x) => num(x[medSel])).map((x) => ({ x: +parse(x.fecha), y: num(x[medSel]), t: fmt(x.fecha) }));
+  return `<div class="card"><h3>📏 Medidas corporales</h3>
+    <form id="fmedida" class="form"><label>Fecha<input name="fecha" type="date" value="${t}" required></label>
+      <div class="cgrid">${MEDIDAS.map(([k, l]) => `<label>${l}${k === 'grasa' ? '' : ' (cm)'}<input name="${k}" type="text" inputmode="decimal"></label>`).join('')}</div>
+      <button class="btn">+ Guardar medidas</button></form>
+    ${M.length ? `<div class="tabs mt">${MEDIDAS.map(([k, l]) => `<button class="tab ${medSel === k ? 'on' : ''}" data-act="medsel" data-k="${k}">${l}</button>`).join('')}</div>
+      ${chartLine(pts, { label: 'medida', dec: true, h: 130, vacio: 'Sin registros de esta medida.' })}
+      <details><summary class="small">Ver registros</summary><ul class="plist">${[...M].reverse().map((x) => `<li><span>${fmt(x.fecha)}</span><span class="small">${MEDIDAS.filter(([k]) => num(x[k])).map(([k, l]) => `${l} ${fmtN(x[k])}`).join(' · ')}</span><button class="link danger" data-act="delmedida" data-f="${x.fecha}" aria-label="Eliminar">✕</button></li>`).join('')}</ul></details>` : '<p class="small muted">La cintura se registra junto con tu peso.</p>'}
+  </div>`;
 }
 
 /* ---- COMIDA (diario) ---- */
@@ -1127,10 +1261,243 @@ function vEquipo() {
   </section>`;
 }
 
+/* ---- Modal genérico ---- */
+function openModal(titulo, body) {
+  const el = $('#modal');
+  if (!el) return;
+  el.innerHTML = `<div class="sheet-bg" data-act="closemodal"></div><div class="sheet-p" role="dialog" aria-label="${esc(titulo)}"><div class="sheet-h"><h3>${titulo}</h3><button class="link" data-act="closemodal" aria-label="Cerrar">✕</button></div>${body}</div>`;
+  el.classList.add('open');
+  document.body.classList.add('sheet-open');
+}
+function closeModal() {
+  const el = $('#modal');
+  if (el) { el.classList.remove('open'); el.innerHTML = ''; }
+  document.body.classList.remove('sheet-open');
+}
+
+/* ---- CUESTIONARIO DE SALUD (PAR-Q+) ---- */
+let saludDraft = null;
+const pqTarget = () => wz || saludDraft;
+const necesitaEmbarazo = (st) => st.sexo === 'F' && num(st.edad) >= 12 && num(st.edad) <= 55;
+function parqBody(st) {
+  const q = (i, txt) => `<div class="pq"><p>${i + 1}. ${txt}</p><div class="chips2">
+    <button type="button" class="chip ${st.parq[i] === true ? 'on' : ''}" data-act="pqset" data-i="${i}" data-v="1">Sí</button>
+    <button type="button" class="chip ${st.parq[i] === false ? 'on' : ''}" data-act="pqset" data-i="${i}" data-v="0">No</button></div></div>`;
+  const algunSi = st.parq.some((x) => x === true) || st.embarazo === true;
+  return `<h2>Tu salud</h2><p class="small muted">Preguntas generales del cuestionario internacional PAR-Q+. Respóndelas con sinceridad: sirven para cuidarte.</p>
+    ${PARQ.map((t, i) => q(i, t)).join('')}
+    ${necesitaEmbarazo(st) ? `<div class="pq"><p>${PARQ.length + 1}. ¿Estás embarazada o tuviste un parto en los últimos 6 meses?</p><div class="chips2">
+      <button type="button" class="chip ${st.embarazo === true ? 'on' : ''}" data-act="pqset" data-i="emb" data-v="1">Sí</button>
+      <button type="button" class="chip ${st.embarazo === false ? 'on' : ''}" data-act="pqset" data-i="emb" data-v="0">No</button></div></div>` : ''}
+    ${algunSi ? '<div class="infobanner mt"><b>Te recomendamos consultar a un médico antes de aumentar tu actividad física.</b> Mientras tanto la app activará el modo precaución: cardio suave en vez de intervalos intensos. Empieza despacio y detente ante dolor en el pecho, mareo o falta de aire.</div>'
+      : st.parq.every((x) => x === false) ? '<div class="okbanner mt">✓ Puedes empezar a ser más activo. Avanza de forma gradual.</div>' : ''}`;
+}
+function parqCompleto(st) {
+  if (st.parq.some((x) => x === null || x === undefined)) return 'Responde todas las preguntas de salud';
+  if (necesitaEmbarazo(st) && (st.embarazo === null || st.embarazo === undefined)) return 'Responde la pregunta sobre embarazo';
+  return null;
+}
+function vSalud() {
+  const p = S.perfil;
+  if (!saludDraft) saludDraft = { parq: p.parq?.resp ? [...p.parq.resp] : PARQ.map(() => null), embarazo: p.parq?.embarazo ?? null, sexo: p.sexo, edad: p.edad };
+  return `${header('Cuestionario de salud', '#/mas')}<section class="wrap wz"><div class="card form">${parqBody(saludDraft)}</div>
+    <button class="btn primary big" data-act="pqsave">Guardar</button>
+    <p class="small muted center">Este cuestionario no reemplaza una evaluación médica.</p></section>`;
+}
+
+/* ---- TEMPORIZADOR DE INTERVALOS ---- */
+const tm = { modo: 'tabata', tr: 40, de: 20, ro: 8, emom: 10, amrap: 12, voz: true };
+const tmRun = { seq: [], i: 0, end: 0, pausa: 0, iv: null, ultimo: -1, activo: false };
+const mmss = (x) => `${Math.floor(x / 60)}:${pad(Math.max(0, Math.floor(x % 60)))}`;
+function hablar(t) {
+  if (!tm.voz || !window.speechSynthesis) return;
+  try { const u = new SpeechSynthesisUtterance(t); u.lang = 'es-ES'; u.rate = 1.05; speechSynthesis.cancel(); speechSynthesis.speak(u); } catch (e) { /* sin voz */ }
+}
+function tmSecuencia() {
+  const seq = [{ n: 'Prepárate', s: 10, tipo: 'prep' }];
+  if (tm.modo === 'tabata' || tm.modo === 'interv') {
+    const tr = tm.modo === 'tabata' ? 20 : num(tm.tr) || 30, de = tm.modo === 'tabata' ? 10 : num(tm.de) ?? 15, ro = tm.modo === 'tabata' ? 8 : num(tm.ro) || 8;
+    for (let i = 0; i < ro; i++) {
+      seq.push({ n: '¡Trabajo!', s: tr, tipo: 'work', r: i + 1, R: ro });
+      if (i < ro - 1 && de > 0) seq.push({ n: 'Descanso', s: de, tipo: 'rest', r: i + 1, R: ro });
+    }
+  } else if (tm.modo === 'emom') {
+    const m = num(tm.emom) || 10;
+    for (let i = 0; i < m; i++) seq.push({ n: `Minuto ${i + 1}`, s: 60, tipo: 'work', r: i + 1, R: m });
+  } else seq.push({ n: 'AMRAP', s: (num(tm.amrap) || 12) * 60, tipo: 'work', r: 1, R: 1, amrap: true });
+  return seq;
+}
+function tmPintar(rest) {
+  const f = tmRun.seq[tmRun.i];
+  const d = $('#tmdisp');
+  if (!d || !f) return;
+  d.dataset.tipo = f.tipo;
+  $('#tmfase').textContent = f.n;
+  $('#tmt').textContent = mmss(rest);
+  $('#tmr').textContent = f.R > 1 ? `Ronda ${f.r} de ${f.R}` : f.amrap ? 'Máximas rondas posibles' : '';
+  $('#tmbar').style.width = `${(1 - rest / f.s) * 100}%`;
+}
+function tmTick() {
+  const f = tmRun.seq[tmRun.i];
+  if (!f) return;
+  const rest = Math.max(0, (tmRun.end - Date.now()) / 1000), ent = Math.ceil(rest);
+  if (ent !== tmRun.ultimo) {
+    tmRun.ultimo = ent;
+    if (ent <= 3 && ent > 0) beepCorto();
+    if (f.amrap && ent === Math.round(f.s / 2)) hablar('Mitad del tiempo');
+    if (f.amrap && ent === 60 && f.s > 120) hablar('Último minuto');
+  }
+  tmPintar(rest);
+  if (rest <= 0) {
+    tmRun.i++;
+    const nx = tmRun.seq[tmRun.i];
+    if (!nx) { tmParar(); $('#tmfase').textContent = '¡Terminado!'; $('#tmt').textContent = '0:00'; hablar('¡Terminado! Buen trabajo'); beep(); navigator.vibrate?.([300, 100, 300]); return; }
+    tmRun.end = Date.now() + nx.s * 1000;
+    tmRun.ultimo = -1;
+    hablar(nx.tipo === 'work' ? (nx.amrap ? 'Comienza' : nx.n.startsWith('Minuto') ? nx.n : 'Trabajo') : 'Descanso');
+    beep();
+  }
+}
+function beepCorto() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.frequency.value = 660; o.connect(g); g.connect(audioCtx.destination);
+    g.gain.setValueAtTime(0.2, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
+    o.start(); o.stop(audioCtx.currentTime + 0.13);
+  } catch (e) { /* sin audio */ }
+}
+function tmParar() { clearInterval(tmRun.iv); tmRun.iv = null; tmRun.activo = false; const b = $('#tmgo'); if (b) b.textContent = '▶ Iniciar'; }
+function vTimer() {
+  const cfg = tm.modo === 'interv'
+    ? `<div class="cgrid"><label>Trabajo (s)<input data-tm="tr" type="text" inputmode="numeric" value="${tm.tr}"></label><label>Descanso (s)<input data-tm="de" type="text" inputmode="numeric" value="${tm.de}"></label><label>Rondas<input data-tm="ro" type="text" inputmode="numeric" value="${tm.ro}"></label></div>`
+    : tm.modo === 'emom' ? `<label>Minutos<input data-tm="emom" type="text" inputmode="numeric" value="${tm.emom}"></label>`
+      : tm.modo === 'amrap' ? `<label>Duración (minutos)<input data-tm="amrap" type="text" inputmode="numeric" value="${tm.amrap}"></label>`
+        : '<p class="small">Tabata clásico: 20 s de trabajo y 10 s de descanso, 8 rondas (4 minutos).</p>';
+  const info = { tabata: 'Máxima intensidad en cada bloque de 20 s.', interv: 'Define tu propio trabajo, descanso y rondas (ideal para circuitos).', emom: 'Al inicio de cada minuto haz las repeticiones indicadas y descansa lo que sobre del minuto.', amrap: 'Haz tantas rondas como puedas del circuito en el tiempo total, sin perder la técnica.' }[tm.modo];
+  return `${header('Temporizador', '#/mas')}<section class="wrap">
+    <div class="tabs">${[['tabata', 'Tabata'], ['interv', 'Intervalos'], ['emom', 'EMOM'], ['amrap', 'AMRAP']].map(([k, l]) => `<button class="tab ${tm.modo === k ? 'on' : ''}" data-act="tmmodo" data-m="${k}">${l}</button>`).join('')}</div>
+    <div class="card tm-disp" id="tmdisp" data-tipo="prep"><div class="tm-fase" id="tmfase">Listo</div><div class="tm-t" id="tmt">${mmss(tmSecuencia().reduce((a, f) => a + f.s, 0))}</div><div class="tm-r" id="tmr">Duración total</div><div class="tm-bar"><i id="tmbar"></i></div></div>
+    <div class="tm-btns"><button class="btn primary big" data-act="tmgo" id="tmgo">▶ Iniciar</button><button class="btn big" data-act="tmreset" aria-label="Reiniciar">↺</button></div>
+    <div class="card form">${cfg}<label class="chkl"><input type="checkbox" data-tm="voz" ${tm.voz ? 'checked' : ''}> Avisos de voz</label><p class="small muted">${info}</p></div>
+  </section>`;
+}
+
+/* ---- RECORDATORIOS (calendario del teléfono) ---- */
+function recCfg() { return { hora: '19:00', antes: 15, peso: true, pesoDia: 2, pesoHora: '08:00', comida: false, comidaHora: '21:00', respaldo: true, ...((S.ajustes || {}).rec || {}) }; }
+function icsRecordatorios() {
+  const r = recCfg(), PL = PLAN(), D = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+  const escI = (t) => String(t).replace(/[\\,;]/g, (m) => '\\' + m);
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  const url = location.origin + location.pathname;
+  const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Mi Entrenamiento//ES', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
+  const prox = (dow) => { const d = new Date(); d.setDate(d.getDate() + ((dow - d.getDay() + 7) % 7)); return d; };
+  const ev = (uid, titulo, dow, hora, dur, alarma, desc, diario) => {
+    const [hh, mm] = hora.split(':');
+    L.push('BEGIN:VEVENT', `UID:${uid}-${stamp}@mientrenamiento`, `DTSTAMP:${stamp}`, `DTSTART:${iso(prox(diario ? new Date().getDay() : dow)).replace(/-/g, '')}T${hh}${mm}00`, `DURATION:PT${dur}M`,
+      diario ? 'RRULE:FREQ=DAILY' : `RRULE:FREQ=WEEKLY;BYDAY=${D[dow]}`, `SUMMARY:${escI(titulo)}`, `DESCRIPTION:${escI(desc)}`,
+      'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${escI(titulo)}`, `TRIGGER:-PT${alarma}M`, 'END:VALARM', 'END:VEVENT');
+  };
+  for (const sid of PL.orden) ev('ses' + sid, `🏋️ ${PL.ses[sid].nombre}`, PL.ses[sid].dow, r.hora, S.perfil.dur || 45, r.antes, `Abre Mi Entrenamiento: ${url}`);
+  if (r.peso) ev('peso', '⚖️ Registrar peso semanal', +r.pesoDia, r.pesoHora, 5, 0, 'En ayunas, después de ir al baño. Regístralo en Mi Entrenamiento.');
+  if (r.comida) ev('comida', '🍽️ Anotar lo que comí hoy', 0, r.comidaHora, 5, 0, 'Diario de comidas en Mi Entrenamiento.', true);
+  if (r.respaldo) ev('resp', '💾 Exportar respaldo de Mi Entrenamiento', 0, '20:00', 5, 0, 'Más → Exportar respaldo.');
+  L.push('END:VCALENDAR');
+  return L.join('\r\n');
+}
+function vRecordatorios() {
+  const r = recCfg(), PL = PLAN();
+  const opt = (v, l, cur) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${l}</option>`;
+  return `${header('Recordatorios', '#/mas')}<section class="wrap">
+    <div class="card"><p class="small">Las apps web no pueden enviar avisos por sí solas sin un servidor. La forma confiable es <b>agregar tus entrenamientos al Calendario de tu teléfono con alarma</b>: te avisará aunque la app esté cerrada.</p></div>
+    <div class="card form"><h3>Entrenamientos</h3>
+      <p class="small muted">${PL.orden.map((sid) => `${DIAS[PL.ses[sid].dow]}: ${PL.ses[sid].nombre}`).join(' · ')}</p>
+      <div class="row2"><label>Hora<input type="time" data-rec="hora" value="${r.hora}"></label><label>Avisar<select data-rec="antes">${opt(0, 'a la hora', r.antes)}${opt(15, '15 min antes', r.antes)}${opt(30, '30 min antes', r.antes)}${opt(60, '1 hora antes', r.antes)}</select></label></div>
+      <h3 class="mt">Otros recordatorios</h3>
+      <label class="chkl"><input type="checkbox" data-rec="peso" ${r.peso ? 'checked' : ''}> Pesarme cada semana</label>
+      ${r.peso ? `<div class="row2"><label>Día<select data-rec="pesoDia">${[1, 2, 3, 4, 5, 6, 0].map((d) => opt(d, DIAS[d], r.pesoDia)).join('')}</select></label><label>Hora<input type="time" data-rec="pesoHora" value="${r.pesoHora}"></label></div>` : ''}
+      <label class="chkl"><input type="checkbox" data-rec="comida" ${r.comida ? 'checked' : ''}> Anotar comidas cada día</label>
+      ${r.comida ? `<label>Hora<input type="time" data-rec="comidaHora" value="${r.comidaHora}"></label>` : ''}
+      <label class="chkl"><input type="checkbox" data-rec="respaldo" ${r.respaldo ? 'checked' : ''}> Exportar respaldo (domingos 20:00)</label>
+    </div>
+    <button class="btn primary big" data-act="recics">📅 Agregar a mi calendario</button>
+    <p class="small muted">Se descargará un archivo de calendario: tócalo y elige <b>Agregar todo</b>. Si cambias tus días u horario, primero borra los eventos anteriores (abre uno → Eliminar evento → <i>Eliminar todos los futuros</i>) y vuelve a agregarlos.</p>
+  </section>`;
+}
+
+/* ---- APARIENCIA ---- */
+function aplicarAjustes() {
+  const a = S.ajustes || {};
+  let tema = a.tema || 'oscuro';
+  if (tema === 'auto') tema = window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'claro' : 'oscuro';
+  document.documentElement.dataset.tema = tema;
+  document.documentElement.style.fontSize = { normal: '16px', grande: '18px', xl: '20px' }[a.letra || 'normal'];
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', tema === 'claro' ? '#f4f4f6' : '#0a0a0b');
+}
+function vAjustes() {
+  const a = S.ajustes || {}, tema = a.tema || 'oscuro', letra = a.letra || 'normal';
+  const op = (k, v, ico, t, d) => `<button type="button" class="opt ${(k === 'tema' ? tema : letra) === v ? 'on' : ''}" data-act="ajset" data-k="${k}" data-v="${v}"><span class="opt-i">${ico}</span><span class="opt-t"><b>${t}</b><small>${d}</small></span></button>`;
+  return `${header('Apariencia', '#/mas')}<section class="wrap">
+    <h2 class="sec">Tema</h2><div class="opts">${op('tema', 'oscuro', '🔥', 'Oscuro', 'Intenso, ideal para entrenar')}${op('tema', 'claro', '☀️', 'Claro', 'Fondo blanco, más fácil de leer con luz')}${op('tema', 'auto', '🌓', 'Automático', 'Sigue el modo del teléfono')}</div>
+    <h2 class="sec">Tamaño de letra</h2><div class="opts">${op('letra', 'normal', 'Aa', 'Normal', 'Tamaño estándar')}${op('letra', 'grande', '<span style="font-size:1.2em">Aa</span>', 'Grande', 'Más cómodo de leer')}${op('letra', 'xl', '<span style="font-size:1.45em">Aa</span>', 'Extra grande', 'Máxima legibilidad')}</div>
+  </section>`;
+}
+
+/* ---- FOTOS DE PROGRESO (se guardan en el teléfono, IndexedDB) ---- */
+const FotosDB = {
+  db: null,
+  abrir() {
+    if (this.db) return Promise.resolve(this.db);
+    return new Promise((ok, err) => {
+      const r = indexedDB.open('entreno_fotos', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('fotos', { keyPath: 'id' });
+      r.onsuccess = () => { this.db = r.result; ok(this.db); };
+      r.onerror = () => err(r.error);
+    });
+  },
+  async tx(modo, fn) {
+    const db = await this.abrir();
+    return new Promise((ok, err) => {
+      const t = db.transaction('fotos', modo), st = t.objectStore('fotos');
+      const req = fn(st);
+      t.oncomplete = () => ok(req?.result);
+      t.onerror = () => err(t.error);
+    });
+  },
+  todas() { return this.tx('readonly', (st) => st.getAll()); },
+  poner(f) { return this.tx('readwrite', (st) => st.put(f)); },
+  borrar(id) { return this.tx('readwrite', (st) => st.delete(id)); },
+};
+let fotosURL = [];
+async function reducirImagen(file) {
+  const img = await imagenDeArchivo(file);
+  const w0 = img.width || img.naturalWidth, h0 = img.height || img.naturalHeight, k = Math.min(1, 1280 / Math.max(w0, h0));
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(w0 * k); cv.height = Math.round(h0 * k);
+  cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+  return new Promise((ok) => cv.toBlob(ok, 'image/jpeg', 0.82));
+}
+async function cargarFotos() {
+  const box = $('#fotos');
+  if (!box) return;
+  try {
+    fotosURL.forEach((u) => URL.revokeObjectURL(u));
+    fotosURL = [];
+    const fs = (await FotosDB.todas()).sort((a, b) => b.fecha.localeCompare(a.fecha) || b.id - a.id);
+    window._fotos = fs;
+    box.innerHTML = fs.length ? fs.map((f) => { const u = URL.createObjectURL(f.blob); fotosURL.push(u); return `<button class="foto" data-act="fotover" data-id="${f.id}"><img src="${u}" alt="Foto ${f.pose} ${f.fecha}"><span>${fmt(f.fecha)} · ${f.pose}</span></button>`; }).join('')
+      : '<p class="small muted">Aún no tienes fotos. Sácalas con la misma luz, ropa y pose cada 2-4 semanas para comparar.</p>';
+  } catch (e) { box.innerHTML = '<p class="small muted">No se pudieron cargar las fotos en este navegador.</p>'; }
+}
+
 /* ---- MÁS ---- */
 function vMas() {
   return `${header('Más')}<section class="wrap">
     <a class="card row-link" href="#/biblioteca"><span>📚</span><div class="grow"><b>Ejercicios</b><span class="small muted">Técnica, animación y videos</span></div>›</a>
+    <a class="card row-link" href="#/timer"><span>⏱️</span><div class="grow"><b>Temporizador</b><span class="small muted">Tabata, intervalos, EMOM y AMRAP con voz</span></div>›</a>
+    <a class="card row-link" href="#/recordatorios"><span>⏰</span><div class="grow"><b>Recordatorios</b><span class="small muted">Agrega tus entrenamientos al calendario</span></div>›</a>
+    <a class="card row-link" href="#/salud"><span>🩺</span><div class="grow"><b>Cuestionario de salud</b><span class="small muted">PAR-Q+ · ${S.perfil?.parq ? 'completado' : 'pendiente'}</span></div>›</a>
+    <a class="card row-link" href="#/ajustes"><span>🎨</span><div class="grow"><b>Apariencia</b><span class="small muted">Tema claro u oscuro y tamaño de letra</span></div>›</a>
     <a class="card row-link" href="#/equipo"><span>🧰</span><div class="grow"><b>Mi equipamiento</b><span class="small muted">Agrega equipo y actualiza tus ejercicios</span></div>›</a>
     <a class="card row-link" href="#/rutinas"><span>🧩</span><div class="grow"><b>Mis rutinas</b><span class="small muted">Crea rutinas y ejercicios propios</span></div>›</a>
     <a class="card row-link" href="#/alimentos"><span>🥫</span><div class="grow"><b>Mis alimentos</b><span class="small muted">Productos creados o escaneados: editar o borrar</span></div>›</a>
@@ -1144,16 +1511,17 @@ function vMas() {
       <p class="small"><b>Android (Chrome):</b> menú ⋮ → <i>Instalar aplicación</i> o <i>Agregar a pantalla principal</i>.<br><b>iPhone (Safari):</b> botón Compartir ⬆️ → <i>Agregar a inicio</i>.<br>Una vez instalada funciona sin internet (los videos sí requieren conexión).</p></div>
     <div class="card small-card"><h3>⚠️ Precauciones</h3><p class="small">Antes de empezar, idealmente hazte un chequeo médico general (presión, ECG si tienes antecedentes). Detén el ejercicio si sientes dolor en el pecho, mareo intenso o falta de aire desproporcionada. Dolor articular punzante = detente y ajusta.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">v1.6.1 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">v1.7 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 
 let libMio = false;
 function vBiblioteca() {
-  const grupos = { 'Fuerza': [], 'Core y rodillas': [], 'Cardio': [] };
+  const grupos = { 'Piernas': [], 'Glúteos e isquios': [], 'Pecho': [], 'Espalda': [], 'Hombros': [], 'Brazos': [], 'Core': [], 'Rodillas y movilidad': [], 'Cardio y metabólico': [] };
   for (const [id, e] of Object.entries(EJERCICIOS)) {
     if (libMio && !puedoHacer(id)) continue;
-    const g = e.tipo === 'cardio' ? 'Cardio' : ['plancha', 'dead_bug', 'bird_dog', 'abduccion_cadera', 'elevacion_talones', 'sentadilla_pared'].includes(id) ? 'Core y rodillas' : 'Fuerza';
+    const pt = PATRON[id];
+    const g = e.tipo === 'cardio' || pt === 'metabolico' ? 'Cardio y metabólico' : pt === 'rodilla' || pt === 'movilidad' ? 'Rodillas y movilidad' : GRUPO_DE_PATRON[pt] || 'Core';
     grupos[g].push([id, e]);
   }
   return `${header('Ejercicios', '#/mas')}<section class="wrap">
@@ -1169,7 +1537,15 @@ function techHTML(id) {
     <h4>Paso a paso</h4><ol>${e.pasos.map((x) => `<li>${x}</li>`).join('')}</ol>
     <h4>Errores comunes</h4><ul class="x">${e.errores.map((x) => `<li>${x}</li>`).join('')}</ul>
     ${e.rodilla && e.rodilla !== '—' && tieneLimit('rodillas') ? `<div class="knee"><b>🦵 Tus rodillas:</b> ${e.rodilla}</div>` : ''}
+    ${variantesHTML(id)}
     <a class="btn yt" href="https://www.youtube.com/results?search_query=${encodeURIComponent(e.yt)}" target="_blank" rel="noopener">▶ Ver videos en YouTube</a>`;
+}
+function variantesHTML(id) {
+  if (!S.perfil || !PATRON[id]) return '';
+  const v = variantes(id, S.perfil);
+  const lst = (arr) => arr.map((x) => `<a href="#/ej/${x.id}">${esc(EJERCICIOS[x.id].nombre)}</a>`).join(' · ');
+  if (!v.faciles.length && !v.dificiles.length) return '';
+  return `<div class="vars">${v.faciles.length ? `<p class="small"><b>⬇ Más fácil:</b> ${lst(v.faciles)}</p>` : ''}${v.dificiles.length ? `<p class="small"><b>⬆ Más difícil:</b> ${lst(v.dificiles)}</p>` : ''}</div>`;
 }
 
 function vEjercicio(id) {
@@ -1207,6 +1583,12 @@ function route() {
     case 'rutinas': html = vRutinas(); break;
     case 'alimentos': html = vAlimentos(); break;
     case 'equipo': html = vEquipo(); break;
+    case 'salud': html = vSalud(); break;
+    case 'recordatorios': html = vRecordatorios(); break;
+    case 'ajustes': html = vAjustes(); break;
+    case 'timer':
+      if (h[1] === 'c' && !tmRun.activo) Object.assign(tm, { modo: 'interv', tr: +h[2] || 30, de: +h[3] || 0, ro: +h[4] || 8 });
+      html = vTimer(); break;
     case 'alimento': html = vAlimento(h[1]); break;
     case 'rutina': html = vRutina(h[1]); break;
     default: v = 'hoy'; html = vHoy();
@@ -1216,14 +1598,17 @@ function route() {
   if (v !== 'rutina') rDraft = null;
   if (v !== 'perfil' && v !== 'onboarding') wz = null;
   if (v !== 'equipo') eqDraft = null;
+  if (v !== 'salud') saludDraft = null;
+  if (v !== 'timer' && tmRun.activo) tmParar();
+  if (v === 'progreso') cargarFotos();
   sheet.open = false;
   document.body.classList.remove('sheet-open');
   document.body.classList.toggle('no-nav', v === 'onboarding');
-  const navKey = { sesion: 'hoy', perfil: 'mas', biblioteca: 'mas', ej: 'mas', rutinas: 'mas', rutina: 'mas', alimentos: 'mas', alimento: 'mas', equipo: 'mas' }[v] || v;
+  const navKey = { sesion: 'hoy', perfil: 'mas', biblioteca: 'mas', ej: 'mas', rutinas: 'mas', rutina: 'mas', alimentos: 'mas', alimento: 'mas', equipo: 'mas', salud: 'mas', recordatorios: 'mas', ajustes: 'mas', timer: 'mas' }[v] || v;
   document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.v === navKey));
   document.body.dataset.sec = navKey;
   main.querySelectorAll('svg[data-anim]').forEach((s) => stops.push(Fig.mount(s, ANIMS[s.dataset.anim])));
-  keepAwake(v === 'sesion');
+  keepAwake(v === 'sesion' || v === 'timer');
   if (v !== 'sesion') stopTimer();
   window.scrollTo(0, 0);
 }
@@ -1253,6 +1638,8 @@ const actions = {
       if (wi && !wi.value && wi.placeholder && num(wi.placeholder) != null) { wi.value = wi.placeholder; s.w = wi.value; }
       if (ri && !ri.value && ri.placeholder) { ri.value = ri.placeholder; s.r = ri.value; }
       startTimer(+row.dataset.rest || 60);
+      const pr = esRecord(id, s);
+      if (pr) { toast(pr); navigator.vibrate?.([60, 40, 60]); }
       // propagar peso a la siguiente serie
       const next = row.nextElementSibling?.querySelector('[data-f="w"]');
       if (next && !next.value && s.w) next.placeholder = s.w;
@@ -1397,6 +1784,121 @@ const actions = {
     S.comidas[comidaDia] = [...diaComidas(comidaDia), ...prev.map((x, i) => ({ ...x, id: Date.now() + '' + i }))];
     save(true); toast('Comida copiada de ayer'); rerender();
   },
+  subopen(btn) {
+    const orig = btn.dataset.orig, actual = btn.dataset.id;
+    const alts = alternativas(orig, S.perfil);
+    const lista = [...(actual !== orig ? [{ id: orig, dif: 0, original: true }] : []), ...alts.filter((x) => x.id !== actual)];
+    const body = lista.length ? `<div class="fres">${lista.map((x) => `<button class="fres-i" data-act="subpick" data-de="${orig}" data-a="${x.id}"><b>${esc(EJERCICIOS[x.id]?.nombre || getEj(x.id).nombre)}${x.original ? ' (original)' : ''}</b><span>${x.dif < 0 ? '⬇ Más fácil' : x.dif > 0 ? '⬆ Más difícil' : '↔ Similar'} · ${esc(EJERCICIOS[x.id]?.equipo || '')}</span></button>`).join('')}</div>
+      <label class="chkl"><input type="checkbox" id="subsiempre"> Usar este cambio también en las próximas sesiones</label>`
+      : '<p class="small muted">No hay alternativas para este movimiento con tu equipo. Puedes agregar equipo en Más → Mi equipamiento.</p>';
+    openModal(`↔ Cambiar ${esc(getEj(actual).nombre)}`, body);
+  },
+  subpick(btn) {
+    const de = btn.dataset.de, a = btn.dataset.a;
+    const lg = getLog(ctx.date, ctx.sid, true);
+    lg.subs = lg.subs || {};
+    if (a === de) delete lg.subs[de]; else lg.subs[de] = a;
+    if ($('#subsiempre')?.checked) {
+      S.reemplazos = (S.reemplazos || []).filter((r) => r.de !== de);
+      if (a !== de) S.reemplazos.push({ de, a, desde: ctx.date });
+    }
+    save(true); closeModal();
+    toast(a === de ? 'Volviste al ejercicio original' : `Cambiado por ${EJERCICIOS[a]?.nombre || 'otro ejercicio'}`);
+    rerender();
+  },
+  subundo(btn) {
+    const de = btn.dataset.orig, lg = getLog(ctx.date, ctx.sid, true);
+    if (lg.subs) delete lg.subs[de];
+    S.reemplazos = (S.reemplazos || []).filter((r) => r.de !== de);
+    save(true); rerender();
+  },
+  closemodal() { closeModal(); },
+  descarga(btn) {
+    S.descargas = S.descargas || {};
+    S.descargas[btn.dataset.w] = true;
+    save(true); toast('Semana de descarga activada'); rerender();
+  },
+  pqset(btn) {
+    const st = pqTarget();
+    if (!st) return;
+    const v = btn.dataset.v === '1';
+    if (btn.dataset.i === 'emb') st.embarazo = v; else st.parq[+btn.dataset.i] = v;
+    rerender();
+  },
+  pqsave() {
+    const err = parqCompleto(saludDraft);
+    if (err) { toast(err); return; }
+    const st = saludDraft;
+    S.perfil.parq = { resp: st.parq, embarazo: necesitaEmbarazo(st) ? st.embarazo : null, fecha: today() };
+    S.perfil.precaucion = st.parq.some((x) => x === true) || (necesitaEmbarazo(st) && st.embarazo === true);
+    saludDraft = null;
+    save(true);
+    toast(S.perfil.precaucion ? 'Guardado · modo precaución activado' : 'Guardado ✓');
+    location.hash = '#/hoy';
+  },
+  tmmodo(btn) { if (tmRun.activo) tmParar(); tm.modo = btn.dataset.m; rerender(); },
+  tmgo() {
+    try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume?.(); } catch (e) { /* sin audio */ }
+    if (tmRun.activo) { // pausar
+      tmRun.pausa = Math.max(0, tmRun.end - Date.now());
+      tmParar(); $('#tmgo').textContent = '▶ Seguir';
+      return;
+    }
+    if (!tmRun.seq.length || tmRun.i >= tmRun.seq.length || !tmRun.pausa) {
+      tmRun.seq = tmSecuencia(); tmRun.i = 0; tmRun.end = Date.now() + tmRun.seq[0].s * 1000;
+      hablar('Prepárate');
+    } else tmRun.end = Date.now() + tmRun.pausa;
+    tmRun.pausa = 0; tmRun.ultimo = -1; tmRun.activo = true;
+    $('#tmgo').textContent = '⏸ Pausa';
+    keepAwake(true);
+    tmRun.iv = setInterval(tmTick, 200);
+    tmTick();
+  },
+  tmreset() { tmParar(); tmRun.seq = []; tmRun.i = 0; tmRun.pausa = 0; rerender(); },
+  recics() {
+    const ics = icsRecordatorios();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }));
+    a.download = 'mi-entrenamiento.ics';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    toast('Abre el archivo y elige "Agregar todo"');
+  },
+  ajset(btn) {
+    S.ajustes = S.ajustes || {};
+    S.ajustes[btn.dataset.k] = btn.dataset.v;
+    save(true); aplicarAjustes(); rerender();
+  },
+  pmodo(btn) { progModo = btn.dataset.v; rerender(); },
+  medsel(btn) { medSel = btn.dataset.k; rerender(); },
+  delmedida(btn) {
+    if (!confirm('¿Eliminar estas medidas?')) return;
+    S.medidas = (S.medidas || []).filter((x) => x.fecha !== btn.dataset.f);
+    save(true); rerender();
+  },
+  fotover(btn) {
+    const id = +btn.dataset.id, fs = window._fotos || [], f = fs.find((x) => x.id === id);
+    if (!f) return;
+    const primera = [...fs].filter((x) => x.pose === f.pose).sort((a, b) => a.fecha.localeCompare(b.fecha))[0];
+    const u1 = URL.createObjectURL(f.blob), comp = primera && primera.id !== f.id ? URL.createObjectURL(primera.blob) : null;
+    fotosURL.push(u1); if (comp) fotosURL.push(comp);
+    openModal(`${f.pose} · ${fmt(f.fecha)}`, `${comp ? `<div class="comp"><figure><img src="${comp}" alt=""><figcaption>${fmt(primera.fecha)} (primera)</figcaption></figure><figure><img src="${u1}" alt=""><figcaption>${fmt(f.fecha)}</figcaption></figure></div>` : `<img class="fotogrande" src="${u1}" alt="">`}
+      <div class="btns mt"><button class="btn" data-act="fotoshare" data-id="${f.id}">Compartir / guardar</button><button class="btn danger ghost" data-act="fotodel" data-id="${f.id}">Eliminar</button></div>`);
+  },
+  async fotoshare(btn) {
+    const f = (window._fotos || []).find((x) => x.id === +btn.dataset.id);
+    if (!f) return;
+    const file = new File([f.blob], `progreso-${f.fecha}-${f.pose}.jpg`, { type: 'image/jpeg' });
+    try {
+      if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], title: 'Foto de progreso' });
+      else { const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; a.click(); }
+    } catch (e) { /* cancelado */ }
+  },
+  async fotodel(btn) {
+    if (!confirm('¿Eliminar esta foto?')) return;
+    await FotosDB.borrar(+btn.dataset.id);
+    closeModal(); cargarFotos();
+  },
   eqset(btn) {
     const v = btn.dataset.v;
     eqDraft.equipo = eqDraft.equipo.includes(v) ? eqDraft.equipo.filter((x) => x !== v) : [...eqDraft.equipo, v];
@@ -1508,7 +2010,7 @@ const actions = {
   reset() {
     if (!confirm('Esto borra TODO tu historial y perfil. ¿Seguro? (Exporta un respaldo antes)')) return;
     if (!confirm('Última confirmación: ¿borrar todo?')) return;
-    S = { perfil: null, logs: {}, pesos: [], caminatas: [], comidas: {}, propios: [], rutinas: [], ejPropios: [] };
+    S = { perfil: null, logs: {}, pesos: [], caminatas: [], comidas: {}, propios: [], rutinas: [], ejPropios: [], reemplazos: [], descargas: {}, medidas: [], ajustes: {} };
     save(true); location.hash = '#/hoy'; route();
   },
 };
@@ -1607,6 +2109,20 @@ function init() {
     if (el.dataset.actChange === 'ejsel') { ejSel = el.value; rerender(); }
     if (el.dataset.rf === 'calent' && rDraft) rDraft.calent = el.checked;
     if (el.id === 'bcfoto' && el.files[0]) leerFoto(el.files[0]);
+    if (el.id === 'ffoto' && el.files[0]) {
+      const file = el.files[0], pose = $('#fpose')?.value || 'Frente';
+      toast('Guardando foto…');
+      reducirImagen(file).then((blob) => FotosDB.poner({ id: Date.now(), fecha: today(), pose, blob })).then(() => { toast('Foto guardada 📸'); cargarFotos(); }).catch(() => toast('No se pudo guardar la foto'));
+      el.value = '';
+    }
+    if (el.dataset.tm) { tm[el.dataset.tm] = el.type === 'checkbox' ? el.checked : el.value; if (!tmRun.activo && el.type !== 'checkbox') { const t0 = $('#tmt'); if (t0) t0.textContent = mmss(tmSecuencia().reduce((a, f) => a + f.s, 0)); } }
+    if (el.dataset.rec) {
+      S.ajustes = S.ajustes || {};
+      const r = recCfg();
+      r[el.dataset.rec] = el.type === 'checkbox' ? el.checked : el.value;
+      S.ajustes.rec = r; save(true);
+      if (el.type === 'checkbox') rerender();
+    }
     if (el.id === 'fimport' && el.files[0]) {
       const r = new FileReader();
       r.onload = () => {
@@ -1614,7 +2130,7 @@ function init() {
           const d = JSON.parse(r.result);
           if (!d.perfil || !d.logs) throw new Error('formato');
           if (!confirm('Esto reemplaza tus datos actuales por los del respaldo. ¿Continuar?')) return;
-          S = { perfil: null, logs: {}, pesos: [], caminatas: [], comidas: {}, propios: [], rutinas: [], ejPropios: [], ...d };
+          S = { perfil: null, logs: {}, pesos: [], caminatas: [], comidas: {}, propios: [], rutinas: [], ejPropios: [], reemplazos: [], descargas: {}, medidas: [], ajustes: {}, ...d };
           save(true); toast('Respaldo importado'); rerender();
         } catch (err) { toast('Archivo no válido'); }
       };
@@ -1635,6 +2151,13 @@ function init() {
       guardarAlimento(d);
       toast('Alimento actualizado ✓');
       location.hash = '#/alimentos';
+    } else if (f.id === 'fmedida') {
+      const m = { fecha: d.fecha };
+      for (const [k] of MEDIDAS) if (num(d[k])) m[k] = num(d[k]);
+      if (Object.keys(m).length < 2) { toast('Ingresa al menos una medida'); return; }
+      S.medidas = (S.medidas || []).filter((x) => x.fecha !== d.fecha);
+      S.medidas.push(m);
+      save(true); toast('Medidas guardadas'); rerender();
     } else if (f.id === 'fejp') {
       S.ejPropios.push({ id: 'x' + Date.now().toString(36), nombre: d.nombre.trim(), peso: !!d.peso, tiempo: !!d.tiempo });
       save(true);
@@ -1657,6 +2180,8 @@ function init() {
   window.addEventListener('hashchange', route);
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); window._installEvt = e; });
   navigator.storage?.persist?.().catch(() => {});
+  aplicarAjustes();
+  window.matchMedia?.('(prefers-color-scheme: light)').addEventListener?.('change', aplicarAjustes);
   route();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     // Si llega una versión nueva mientras la app está abierta, recarga una vez para mostrarla

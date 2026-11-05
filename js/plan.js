@@ -338,22 +338,22 @@ const CARDIO_MOD = {
 
 /* ---------- Opciones por "espacio" del plan (en orden de preferencia) ---------- */
 const SLOTS = {
-  pierna: ['sentadilla_barra', 'prensa', 'sentadilla_goblet', 'sentadilla_cajon'],
+  pierna: ['sentadilla_barra', 'prensa', 'sentadilla_goblet', 'sentadilla_cajon', 'sentadilla_sumo', 'sentadilla_bulgara', 'subida_cajon', 'sentadilla_hack', 'sentadilla_cajon_alta', 'sentadilla_banda'],
   pierna_iso: ['sentadilla_pared'],
-  bisagra: ['peso_muerto_rumano', 'peso_muerto_mancuernas', '~puente'],
+  bisagra: ['peso_muerto_rumano', 'peso_muerto_mancuernas', 'peso_muerto_kb', 'peso_muerto_una_pierna', 'curl_femoral_maquina', 'puente_isquios', '~puente'],
   bisagra_m: ['peso_muerto', 'peso_muerto_rumano', 'peso_muerto_mancuernas', '~puente'],
   puente: ['puente'],
   zancada: ['zancada'],
-  empujeH: ['press_banca', 'press_suelo', 'flexiones', 'flexiones_inclinadas'],
-  empujeV: ['press_militar', '~elevaciones_laterales'],
-  tironH: ['remo_polea', 'remo_mancuerna', 'remo_barra', 'remo_trx', '~superman'],
-  tironV: ['dominadas', 'jalon'],
-  hombroL: ['elevaciones_laterales'],
-  biceps: ['curl_biceps'],
-  triceps: ['extension_triceps_polea', 'extension_triceps'],
-  carga: ['paseo_granjero'],
-  core1: ['plancha'], core2: ['dead_bug'], core3: ['bird_dog'], coreF: ['rueda_abdominal', 'bird_dog', 'plancha'],
-  gluteoM: ['abduccion_cadera'], pantorrilla: ['elevacion_talones'],
+  empujeH: ['press_banca', 'press_suelo', 'flexiones', 'flexiones_inclinadas', 'press_banca_mancuernas', 'press_inclinado_mancuernas', 'press_pecho_maquina', 'flexiones_trx', 'press_pecho_banda', 'flexiones_rodillas'],
+  empujeV: ['press_militar', 'press_militar_pie', 'press_hombro_maquina', 'press_arnold', 'press_hombro_banda', '~elevaciones_laterales'],
+  tironH: ['remo_polea', 'remo_mancuerna', 'remo_barra', 'remo_trx', 'remo_pecho_apoyado', 'remo_maquina', 'remo_invertido', 'remo_banda_pie', 'remo_polea_unilateral', '~superman'],
+  tironV: ['dominadas', 'jalon', 'dominadas_supinas', 'jalon_cerrado', 'dominadas_asistidas', 'jalon_banda'],
+  hombroL: ['elevaciones_laterales', 'face_pull', 'pajaros', 'elevacion_lateral_polea', 'elevaciones_frontales'],
+  biceps: ['curl_biceps', 'curl_martillo', 'curl_barra', 'curl_polea', 'curl_banda', 'curl_concentrado'],
+  triceps: ['extension_triceps_polea', 'extension_triceps', 'press_frances', 'patada_triceps', 'extension_triceps_banda', 'fondos_banco'],
+  carga: ['paseo_granjero', 'paseo_maleta'],
+  core1: ['plancha', 'plancha_lateral', 'plancha_toque_hombros'], core2: ['dead_bug', 'crunch_bicicleta', 'pallof'], core3: ['bird_dog', 'plancha_lateral_rodillas', 'pallof'], coreF: ['rueda_abdominal', 'bird_dog', 'plancha'],
+  gluteoM: ['abduccion_cadera', 'almeja', 'puente_banda', 'caminata_lateral_banda', 'abduccion_maquina'], pantorrilla: ['elevacion_talones', 'talones_una_pierna', 'talones_sentado'],
   c_bisagra1: ['peso_muerto_mancuernas', '~puente'],
   c_bisagra2: ['swing', 'peso_muerto_mancuernas', '~puente'],
   c_pierna: ['sentadilla_goblet', 'sentadilla_cajon'],
@@ -466,7 +466,8 @@ function elegirCardio(p, eq) {
 }
 const FACTOR_CARDIO = { bajar: 1, cardio: 1.25, tonificar: 0.85, salud: 0.8, musculo: 0.8 };
 
-function generarPlan(p) {
+function generarPlan(p, ciclo = 1) {
+  const rot = Math.max(0, (ciclo || 1) - 1);
   const eq = equipoDe(p);
   const grupo = p.objetivo === 'musculo' ? 'musculo' : 'quemar';
   const dias = [...(p.dias || [2, 3, 4, 5])].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7));
@@ -486,7 +487,15 @@ function generarPlan(p) {
     const todas = SLOTS[slot] || [];
     const ok = (id) => disponible(id, p, eq) && !usados.has(id);
     const ops = todas.filter((x) => x[0] !== '~').filter(ok);
-    if (ops.length) return ops[Math.min(rank, ops.length - 1)];
+    if (ops.length) {
+      const base = ops[Math.min(rank - rot, ops.length - 1)];
+      if (!rot) return base;
+      // en ciclos nuevos rota entre opciones de igual o mayor nivel (nunca retrocede)
+      const lv = (x) => META[x]?.lvl || 0;
+      const cands = ops.filter((x) => !META[x]?.reg && lv(x) >= lv(base));
+      if (!cands.includes(base)) cands.unshift(base);
+      return cands[(cands.indexOf(base) + rot) % cands.length];
+    }
     const fb = todas.filter((x) => x[0] === '~').map((x) => x.slice(1)).filter(ok);
     return fb[0] || null;
   };
@@ -498,7 +507,7 @@ function generarPlan(p) {
     for (const b of t.bloques) {
       if (b.slot) {
         if (b.prio > maxPrio) continue;
-        const id = elegir(b.slot, b.rank, usados);
+        const id = elegir(b.slot, b.rank + rot, usados);
         if (!id) continue;
         usados.add(id);
         const ex = EJERCICIOS[id];
@@ -507,7 +516,7 @@ function generarPlan(p) {
       } else if (b.tipo === 'circuito') {
         const ejercicios = [];
         for (const s of b.slots) {
-          const id = elegir(s.slot, 0, usados);
+          const id = elegir(s.slot, rot, usados);
           if (id) { usados.add(id); ejercicios.push({ id, fases: s.fases }); }
         }
         bloques.push({ ...b, ejercicios });
