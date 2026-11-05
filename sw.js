@@ -1,6 +1,6 @@
 /* Service worker: la app funciona sin internet.
    Al publicar cambios, sube el número de VERSION. */
-const VERSION = 'entreno-v4';
+const VERSION = 'entreno-v5';
 const FILES = [
   './', './index.html', './manifest.webmanifest', './css/app.css',
   './js/data.js', './js/foods.js', './js/anim.js', './js/app.js',
