@@ -100,6 +100,26 @@ Object.assign(ANIMS, {
     return { props: [{ t: 'bike' }], base: { torso: -55 }, frames, dur: 120 };
   })(),
 });
+Object.assign(ANIMS, {
+  rueda_abdominal: {
+    props: [{ t: 'wheel', at: 'handN' }],
+    base: { leg: { n: { a: [90, 180] } }, footN: 180 },
+    frames: [
+      { hip: [92, 128], torso: -45, arm: { n: { ik: [130, 152], bend: 1 } }, hold: 300 },
+      { hip: [100, 132], torso: -12, arm: { n: { ik: [190, 152], bend: 1 } }, hold: 400 },
+    ],
+    dur: 1500,
+  },
+  remo_trx: {
+    props: [{ t: 'cable', from: 'handN', to: [170, -8] }],
+    base: { leg: { n: { ik: [150, 168] } }, footN: -20 },
+    frames: [
+      { hip: [109, 97], torso: -120, arm: { n: { ik: [131, 19], bend: 1 } }, hold: 300 },
+      { hip: [124.7, 90], torso: -108, arm: { n: { ik: [126, 30], bend: 1 } }, hold: 500 },
+    ],
+    dur: 1300,
+  },
+});
 const pasos = (dy, props) => ({
   props,
   base: { torso: -86 },
@@ -214,6 +234,20 @@ Object.assign(EJERCICIOS, {
   },
 });
 EJERCICIOS.swing.equipo = '1 mancuerna o kettlebell';
+Object.assign(EJERCICIOS, {
+  rueda_abdominal: {
+    nombre: 'Rueda abdominal (de rodillas)', musculos: 'Core completo, hombros', equipo: 'Rueda abdominal + colchoneta',
+    tipo: 'fuerza', step: 0, nota: 'Para progresar, rueda un poco más lejos o haz la vuelta más lenta.',
+    pasos: ['De rodillas sobre una colchoneta, toma la rueda bajo los hombros.', 'Aprieta abdomen y glúteos; rueda hacia adelante manteniendo la espalda neutra.', 'Llega solo hasta donde no se hunda la zona lumbar.', 'Vuelve tirando con el abdomen, no con la cadera.'],
+    errores: ['Hundir la espalda baja', 'Ir más lejos de lo que controlas', 'Aguantar la respiración'], rodilla: 'Usa un cojín bajo las rodillas.', yt: 'rueda abdominal de rodillas técnica',
+  },
+  remo_trx: {
+    nombre: 'Remo con TRX / suspensión', musculos: 'Espalda, bíceps, core', equipo: 'TRX o cintas de suspensión',
+    tipo: 'fuerza', step: 0, nota: 'Más inclinado (pies más adelante) = más difícil.',
+    pasos: ['Toma las asas y camina con los pies hacia adelante hasta quedar inclinado hacia atrás.', 'Cuerpo recto como una tabla, brazos estirados.', 'Tira el pecho hacia las manos llevando los codos atrás.', 'Baja controlado sin perder la línea del cuerpo.'],
+    errores: ['Cadera caída', 'Encoger hombros', 'Bajar de golpe'], rodilla: 'Sin carga en rodillas.', yt: 'remo con TRX técnica',
+  },
+});
 
 /* ---------- Requisitos de cada ejercicio ----------
    eq: equipo ('|' = cualquiera de, '+' = todos), lvl: nivel mínimo (0 principiante … 3 avanzado),
@@ -235,6 +269,7 @@ const META = {
   bird_dog: { eq: 'pc', lvl: 0 }, abduccion_cadera: { eq: 'pc', lvl: 0 }, elevacion_talones: { eq: 'pc', lvl: 0 },
   paseo_granjero: { eq: 'mancuernas|kettlebell', lvl: 0 }, swing: { eq: 'kettlebell|mancuernas', lvl: 1, no: ['espalda'] },
   saltar_cuerda: { eq: 'cuerda', lvl: 1, no: ['rodillas'] },
+  rueda_abdominal: { eq: 'rueda', lvl: 1, no: ['espalda', 'hombros'] }, remo_trx: { eq: 'trx', lvl: 0 },
 };
 
 /* ---------- Opciones del perfil ---------- */
@@ -261,12 +296,13 @@ const PERFIL_OPC = {
   equipo: [
     ['mancuernas', '🏋️', 'Mancuernas'], ['barra', '➖', 'Barra y discos'], ['banco', '🛋️', 'Banco'],
     ['bandas', '🎗️', 'Bandas elásticas'], ['dominadas', '🚪', 'Barra de dominadas'], ['kettlebell', '🔔', 'Kettlebell'],
-    ['cuerda', '🪢', 'Cuerda para saltar'], ['eliptica', '🚴', 'Elíptica'], ['trotadora', '🏃', 'Trotadora'], ['bicicleta', '🚲', 'Bicicleta estática'],
+    ['cuerda', '🪢', 'Cuerda para saltar'], ['trx', '🔗', 'TRX / suspensión'], ['rueda', '⚙️', 'Rueda abdominal'],
+    ['eliptica', '🚴', 'Elíptica'], ['trotadora', '🏃', 'Trotadora'], ['bicicleta', '🚲', 'Bicicleta estática'],
   ],
   limitaciones: [['rodillas', '🦵 Rodillas'], ['espalda', '🔙 Espalda baja'], ['hombros', '💪 Hombros'], ['munecas', '✋ Muñecas']],
 };
 const NIVEL_N = { principiante: 0, intermedio_bajo: 1, intermedio: 2, avanzado: 3 };
-const EQUIPO_GYM = ['mancuernas', 'barra', 'banco', 'rack', 'maquinas', 'poleas', 'dominadas', 'kettlebell', 'bandas', 'cuerda', 'eliptica', 'trotadora', 'bicicleta'];
+const EQUIPO_GYM = ['mancuernas', 'barra', 'banco', 'rack', 'maquinas', 'poleas', 'dominadas', 'kettlebell', 'bandas', 'cuerda', 'trx', 'rueda', 'eliptica', 'trotadora', 'bicicleta'];
 
 /* ---------- Modalidades de cardio ---------- */
 const CARDIO_MOD = {
@@ -287,19 +323,19 @@ const SLOTS = {
   zancada: ['zancada'],
   empujeH: ['press_banca', 'press_suelo', 'flexiones', 'flexiones_inclinadas'],
   empujeV: ['press_militar', '~elevaciones_laterales'],
-  tironH: ['remo_polea', 'remo_mancuerna', 'remo_barra', '~superman'],
+  tironH: ['remo_polea', 'remo_mancuerna', 'remo_barra', 'remo_trx', '~superman'],
   tironV: ['dominadas', 'jalon'],
   hombroL: ['elevaciones_laterales'],
   biceps: ['curl_biceps'],
   triceps: ['extension_triceps_polea', 'extension_triceps'],
   carga: ['paseo_granjero'],
-  core1: ['plancha'], core2: ['dead_bug'], core3: ['bird_dog'],
+  core1: ['plancha'], core2: ['dead_bug'], core3: ['bird_dog'], coreF: ['rueda_abdominal', 'bird_dog', 'plancha'],
   gluteoM: ['abduccion_cadera'], pantorrilla: ['elevacion_talones'],
   c_bisagra1: ['peso_muerto_mancuernas', '~puente'],
   c_bisagra2: ['swing', 'peso_muerto_mancuernas', '~puente'],
   c_pierna: ['sentadilla_goblet', 'sentadilla_cajon'],
   c_empuje: ['flexiones', 'flexiones_inclinadas', 'press_suelo'],
-  c_tiron: ['remo_barra', 'remo_mancuerna', 'remo_polea', '~superman'],
+  c_tiron: ['remo_barra', 'remo_mancuerna', 'remo_polea', 'remo_trx', '~superman'],
   c_cardio: ['saltar_cuerda'],
 };
 
@@ -350,7 +386,7 @@ const PLANTILLAS = {
   E: () => ({
     nombre: 'Fuerza C', foco: 'Cuerpo completo', dur: '40-45 min',
     bloques: [{ tipo: 'calentamiento' }, E('pierna', 'acc', 1, 1), E('empujeH', 'acc', 0, 1), E('tironH', 'acc', 2, 1),
-      E('bisagra', 'acc', 1, 2), E('hombroL', 'acc', 0, 2), E('core3', 'core', 0, 2), { tipo: 'cardio', kind: 'final' }],
+      E('bisagra', 'acc', 1, 2), E('hombroL', 'acc', 0, 2), E('coreF', 'core', 0, 2), { tipo: 'cardio', kind: 'final' }],
   }),
   F: () => ({
     nombre: 'Cardio suave + Movilidad', foco: 'Recuperación activa', dur: '30-40 min',
@@ -362,11 +398,11 @@ const PLANTILLAS = {
   FB: () => ({ nombre: 'Cuerpo completo B', foco: 'Fuerza general', dur: '45-60 min', bloques: [{ tipo: 'calentamiento' },
     E('bisagra_m', 'comp', 0, 1), E('empujeH', 'comp', 1, 1), E('tironV', 'comp', 0, 1, true), E('tironH', 'comp', 1, 1), E('pierna', 'acc', 1, 2), E('core2', 'core', 0, 2), E('triceps', 'acc', 0, 3), { tipo: 'cardio', kind: 'final' }] }),
   FC: () => ({ nombre: 'Cuerpo completo C', foco: 'Volumen y brazos', dur: '45-60 min', bloques: [{ tipo: 'calentamiento' },
-    E('pierna', 'comp', 1, 1), E('empujeH', 'acc', 0, 1), E('tironH', 'acc', 2, 1), E('puente', 'acc', 0, 2), E('hombroL', 'acc', 0, 2), E('biceps', 'acc', 0, 2), E('triceps', 'acc', 0, 2), E('core3', 'core', 0, 3)] }),
+    E('pierna', 'comp', 1, 1), E('empujeH', 'acc', 0, 1), E('tironH', 'acc', 2, 1), E('puente', 'acc', 0, 2), E('hombroL', 'acc', 0, 2), E('biceps', 'acc', 0, 2), E('triceps', 'acc', 0, 2), E('coreF', 'core', 0, 3)] }),
   TA: () => ({ nombre: 'Torso A', foco: 'Pecho, espalda y hombros', dur: '45-60 min', bloques: [{ tipo: 'calentamiento' },
     E('empujeH', 'comp', 0, 1), E('tironV', 'comp', 0, 1, true), E('tironH', 'comp', 0, 1), E('empujeV', 'comp', 0, 2), E('hombroL', 'acc', 0, 2), E('biceps', 'acc', 0, 2), E('triceps', 'acc', 0, 2), { tipo: 'cardio', kind: 'final' }] }),
   PA: () => ({ nombre: 'Piernas A', foco: 'Cuádriceps y glúteos', dur: '45-60 min', bloques: [{ tipo: 'calentamiento' },
-    E('pierna', 'comp', 0, 1), E('bisagra', 'comp', 0, 1), E('zancada', 'acc', 0, 2, true), E('puente', 'acc', 0, 2), E('pantorrilla', 'acc', 0, 2), E('core1', 'tiempo', 0, 3)] }),
+    E('pierna', 'comp', 0, 1), E('bisagra', 'comp', 0, 1), E('zancada', 'acc', 0, 2, true), E('puente', 'acc', 0, 2), E('pantorrilla', 'acc', 0, 2), E('coreF', 'core', 0, 3)] }),
   TB: () => ({ nombre: 'Torso B', foco: 'Espalda, pecho y brazos', dur: '45-60 min', bloques: [{ tipo: 'calentamiento' },
     E('tironH', 'comp', 1, 1), E('empujeH', 'comp', 1, 1), E('tironV', 'comp', 0, 2, true), E('empujeV', 'acc', 0, 2), E('biceps', 'acc', 0, 2), E('triceps', 'acc', 0, 2), E('carga', 'tiempo', 0, 3), { tipo: 'cardio', kind: 'final' }] }),
   PB: () => ({ nombre: 'Piernas B', foco: 'Cadena posterior', dur: '45-60 min', bloques: [{ tipo: 'calentamiento' },

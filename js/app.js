@@ -120,6 +120,13 @@ const textoMeta = (o) => (o.menor
     : o.adj > 0 ? 'Tu meta tiene un superávit de ~10% para ganar músculo sin acumular mucha grasa.'
       : 'Tu meta es de mantención: comer lo mismo que gastas.') + ' Se recalcula sola con tu último peso.';
 const tieneLimit = (x) => (S.perfil?.limit || []).includes(x);
+function puedoHacer(id, p = S.perfil) {
+  if (!p) return true;
+  const eq = equipoDe(p);
+  if (META[id]) return disponible(id, p, eq);
+  if (['eliptica', 'bicicleta', 'trotadora'].includes(id)) return eq.has(id);
+  return true;
+}
 
 /* ---------- Caminatas ---------- */
 const sumar = (arr, k) => arr.reduce((a, c) => a + (num(c[k]) || 0), 0);
@@ -594,6 +601,7 @@ function vPlan() {
     ${wi.deload ? '<div class="hint warn">Semana de descarga: 1 serie menos por ejercicio y pesos cómodos. Recupera para volver más fuerte.</div>' : ''}
     <div class="card pweek">${dias}</div>
     <h2 class="sec">Las 3 fases</h2>${fases}
+    <a class="card row-link" href="#/equipo"><span>🧰</span><div class="grow"><b>¿Tienes equipo nuevo?</b><span class="small muted">Agrégalo y actualiza tu plan</span></div>›</a>
     <a class="card row-link" href="#/rutinas"><span>🧩</span><div class="grow"><b>Rutinas personalizadas</b><span class="small muted">Crea las tuyas y hazlas cualquier día</span></div>›</a>
     <div class="card small-card"><h3>Cómo progresar</h3><p class="small">Usa <b>doble progresión</b>: cuando completes todas las series en el máximo del rango (ej. 3×15), sube el peso en la próxima sesión y vuelve al mínimo del rango. La app te avisa con ⬆️. En el cardio, los minutos suben automáticamente cada semana.</p></div>
   </section>`;
@@ -1018,7 +1026,9 @@ function vRutina(id) {
   }
   const d = rDraft;
   const plan = Object.keys(EJERCICIOS).filter((x) => EJERCICIOS[x].tipo !== 'cardio');
-  const opts = `<optgroup label="Ejercicios de la app">${plan.map((x) => `<option value="${x}">${esc(EJERCICIOS[x].nombre)}</option>`).join('')}</optgroup>` +
+  const conEq = plan.filter((x) => puedoHacer(x)), sinEq = plan.filter((x) => !puedoHacer(x));
+  const opts = `<optgroup label="Con tu equipo">${conEq.map((x) => `<option value="${x}">${esc(EJERCICIOS[x].nombre)}</option>`).join('')}</optgroup>` +
+    (sinEq.length ? `<optgroup label="Requieren otro equipo (o tienen restricción)">${sinEq.map((x) => `<option value="${x}">${esc(EJERCICIOS[x].nombre)}</option>`).join('')}</optgroup>` : '') +
     (S.ejPropios.length ? `<optgroup label="Mis ejercicios">${S.ejPropios.map((e) => `<option value="${e.id}">${esc(e.nombre)}</option>`).join('')}</optgroup>` : '');
   const rows = d.ejercicios.map((e, i) => {
     const ex = getEj(e.id);
@@ -1061,10 +1071,67 @@ function vAlimento(id) {
   return `${header('Editar alimento', '#/alimentos')}<section class="wrap"><div class="card">${formAlimentoHTML(a, { id: 'fpropio', boton: 'Guardar cambios', volver: '<a class="btn ghost big" href="#/alimentos">Cancelar</a>' })}</div></section>`;
 }
 
+/* ---- MI EQUIPAMIENTO ---- */
+let eqDraft = null;
+function diffPlanes(a, b) {
+  const nombre = (id) => EJERCICIOS[id]?.nombre || id;
+  const ejs = (se) => se ? se.bloques.flatMap((x) => (x.tipo === 'ej' ? [x.id] : x.tipo === 'circuito' ? x.ejercicios.map((e) => e.id) : [])) : [];
+  const out = [];
+  for (const sid of new Set([...a.orden, ...b.orden])) {
+    const A = ejs(a.ses[sid]), B = ejs(b.ses[sid]);
+    const sale = A.filter((x) => !B.includes(x)), entra = B.filter((x) => !A.includes(x));
+    if (sale.length || entra.length || (a.ses[sid]?.nombre !== b.ses[sid]?.nombre)) {
+      out.push({ nombre: (b.ses[sid] || a.ses[sid]).nombre, sale: sale.map(nombre), entra: entra.map(nombre) });
+    }
+  }
+  if (a.cardio.label !== b.cardio.label) out.push({ nombre: 'Cardio', sale: [a.cardio.label], entra: [b.cardio.label] });
+  return out;
+}
+function vEquipo() {
+  const p = S.perfil;
+  if (!eqDraft) eqDraft = { lugar: p.lugar || 'casa', equipo: [...(p.equipo || [])], mancMax: p.mancMax ?? '' };
+  const d = eqDraft;
+  const nuevo = { ...p, lugar: d.lugar, equipo: d.lugar === 'casa' ? d.equipo : [], mancMax: num(d.mancMax) };
+  const cambios = diffPlanes(PLAN(), generarPlan(nuevo));
+  const todos = Object.keys(META);
+  const ganados = todos.filter((id) => puedoHacer(id, nuevo) && !puedoHacer(id, p)).map((id) => EJERCICIOS[id].nombre);
+  const perdidos = todos.filter((id) => !puedoHacer(id, nuevo) && puedoHacer(id, p)).map((id) => EJERCICIOS[id].nombre);
+  // ejercicios que el equipo nuevo permitiría, pero que el nivel o las molestias descartan
+  const eqN = equipoDe(nuevo), eqP = equipoDe(p);
+  const bloqueados = todos.filter((id) => cumpleEq(META[id].eq, eqN) && !cumpleEq(META[id].eq, eqP) && !puedoHacer(id, nuevo)).map((id) => {
+    const lv = META[id].lvl || 0;
+    const porNivel = lv > (NIVEL_N[p.nivel] ?? 1);
+    return `${EJERCICIOS[id].nombre} (${porNivel ? `requiere nivel ${PERFIL_OPC.niveles[lv][1].toLowerCase()}` : 'no recomendado por tus molestias'})`;
+  });
+  const hayCambio = JSON.stringify([p.lugar, p.equipo || [], p.mancMax ?? null]) !== JSON.stringify([nuevo.lugar, nuevo.equipo, nuevo.mancMax ?? null]);
+  const chip = (v, label) => `<button type="button" class="chip ${d.equipo.includes(v) ? 'on' : ''}" data-act="eqset" data-v="${v}">${label}</button>`;
+  return `${header('Mi equipamiento', '#/mas')}<section class="wrap">
+    <p class="small muted">Marca lo que tienes. Antes de guardar verás qué ejercicios se suman y cómo cambia tu plan.</p>
+    <div class="opts two">
+      <button type="button" class="opt ${d.lugar === 'casa' ? 'on' : ''}" data-act="eqlugar" data-v="casa"><span class="opt-i">🏠</span><span class="opt-t"><b>En casa</b><small>Con lo que tengas</small></span></button>
+      <button type="button" class="opt ${d.lugar === 'gimnasio' ? 'on' : ''}" data-act="eqlugar" data-v="gimnasio"><span class="opt-i">🏋️</span><span class="opt-t"><b>Gimnasio</b><small>Equipo completo</small></span></button>
+    </div>
+    ${d.lugar === 'casa' ? `<div class="card"><h3>Tu equipo en casa</h3><div class="chips">${PERFIL_OPC.equipo.map(([v, i, l]) => chip(v, `${i} ${l}`)).join('')}</div>
+      ${d.equipo.includes('mancuernas') ? `<label class="mt">Peso máximo de tus mancuernas (kg cada una)<input data-eq="mancMax" type="text" inputmode="decimal" value="${esc(d.mancMax)}" placeholder="ej: 20"></label>` : ''}</div>` : '<div class="card"><p class="small">En el gimnasio usamos máquinas, poleas, barras, mancuernas, TRX y máquinas de cardio.</p></div>'}
+    <div class="card ${hayCambio ? 'accent-b' : ''}"><h3>${hayCambio ? 'Así cambiaría tu plan' : 'Sin cambios todavía'}</h3>
+      ${!hayCambio ? '<p class="small muted">Marca o desmarca equipo para ver el efecto.</p>' : `
+      ${ganados.length ? `<p class="small"><b class="good">+ ${ganados.length} ejercicios disponibles:</b> ${ganados.map(esc).join(', ')}</p>` : ''}
+      ${perdidos.length ? `<p class="small"><b style="color:var(--bad)">− ${perdidos.length} ya no disponibles:</b> ${perdidos.map(esc).join(', ')}</p>` : ''}
+      ${bloqueados.length ? `<p class="small muted">🔒 ${bloqueados.map(esc).join(', ')}. Cuando subas de nivel, cámbialo en Mi perfil y objetivos.</p>` : ''}
+      ${cambios.length ? cambios.map((c) => `<div class="diff"><b>${esc(c.nombre)}</b>${c.sale.map((x) => `<span class="sale">− ${esc(x)}</span>`).join('')}${c.entra.map((x) => `<span class="entra">+ ${esc(x)}</span>`).join('')}</div>`).join('')
+        : '<p class="small muted">Las sesiones de tu plan no cambian (los ejercicios nuevos quedan disponibles para tus rutinas y la biblioteca).</p>'}`}
+    </div>
+    <button class="btn primary big" data-act="eqsave" ${hayCambio ? '' : 'disabled'}>${cambios.length ? 'Actualizar mi plan' : 'Guardar equipamiento'}</button>
+    <p class="small muted center">Tu historial no se pierde. Las sesiones nuevas aplican desde tu próximo entrenamiento.</p>
+    <a class="card row-link" href="#/rutinas"><span>🧩</span><div class="grow"><b>Mis rutinas</b><span class="small muted">Suma los ejercicios nuevos a tus rutinas propias</span></div>›</a>
+  </section>`;
+}
+
 /* ---- MÁS ---- */
 function vMas() {
   return `${header('Más')}<section class="wrap">
     <a class="card row-link" href="#/biblioteca"><span>📚</span><div class="grow"><b>Ejercicios</b><span class="small muted">Técnica, animación y videos</span></div>›</a>
+    <a class="card row-link" href="#/equipo"><span>🧰</span><div class="grow"><b>Mi equipamiento</b><span class="small muted">Agrega equipo y actualiza tus ejercicios</span></div>›</a>
     <a class="card row-link" href="#/rutinas"><span>🧩</span><div class="grow"><b>Mis rutinas</b><span class="small muted">Crea rutinas y ejercicios propios</span></div>›</a>
     <a class="card row-link" href="#/alimentos"><span>🥫</span><div class="grow"><b>Mis alimentos</b><span class="small muted">Productos creados o escaneados: editar o borrar</span></div>›</a>
     <a class="card row-link" href="#/perfil"><span>👤</span><div class="grow"><b>Mi perfil y objetivos</b><span class="small muted">Datos, objetivo, lugar, equipo, días y molestias</span></div>›</a>
@@ -1077,17 +1144,21 @@ function vMas() {
       <p class="small"><b>Android (Chrome):</b> menú ⋮ → <i>Instalar aplicación</i> o <i>Agregar a pantalla principal</i>.<br><b>iPhone (Safari):</b> botón Compartir ⬆️ → <i>Agregar a inicio</i>.<br>Una vez instalada funciona sin internet (los videos sí requieren conexión).</p></div>
     <div class="card small-card"><h3>⚠️ Precauciones</h3><p class="small">Antes de empezar, idealmente hazte un chequeo médico general (presión, ECG si tienes antecedentes). Detén el ejercicio si sientes dolor en el pecho, mareo intenso o falta de aire desproporcionada. Dolor articular punzante = detente y ajusta.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">v1.5 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">v1.6 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 
+let libMio = false;
 function vBiblioteca() {
   const grupos = { 'Fuerza': [], 'Core y rodillas': [], 'Cardio': [] };
   for (const [id, e] of Object.entries(EJERCICIOS)) {
+    if (libMio && !puedoHacer(id)) continue;
     const g = e.tipo === 'cardio' ? 'Cardio' : ['plancha', 'dead_bug', 'bird_dog', 'abduccion_cadera', 'elevacion_talones', 'sentadilla_pared'].includes(id) ? 'Core y rodillas' : 'Fuerza';
     grupos[g].push([id, e]);
   }
-  return `${header('Ejercicios', '#/mas')}<section class="wrap">${Object.entries(grupos).map(([g, arr]) => `<h2 class="sec">${g}</h2><div class="lib">${arr.map(([id, e]) => `<a class="libi" href="#/ej/${id}">${Fig.still(ANIMS[id])}<b>${e.nombre}</b><span class="small muted">${e.musculos}</span></a>`).join('')}</div>`).join('')}</section>`;
+  return `${header('Ejercicios', '#/mas')}<section class="wrap">
+    <div class="seg"><button class="${libMio ? '' : 'on'}" data-act="libf" data-v="0">Todos</button><button class="${libMio ? 'on' : ''}" data-act="libf" data-v="1">Con mi equipo</button></div>
+    ${Object.entries(grupos).filter(([, arr]) => arr.length).map(([g, arr]) => `<h2 class="sec">${g}</h2><div class="lib">${arr.map(([id, e]) => `<a class="libi ${puedoHacer(id) ? '' : 'nodisp'}" href="#/ej/${id}">${Fig.still(ANIMS[id])}<b>${e.nombre}</b><span class="small muted">${e.musculos}</span></a>`).join('')}</div>`).join('')}</section>`;
 }
 
 function techHTML(id) {
@@ -1135,6 +1206,7 @@ function route() {
     case 'ej': html = vEjercicio(h[1]); break;
     case 'rutinas': html = vRutinas(); break;
     case 'alimentos': html = vAlimentos(); break;
+    case 'equipo': html = vEquipo(); break;
     case 'alimento': html = vAlimento(h[1]); break;
     case 'rutina': html = vRutina(h[1]); break;
     default: v = 'hoy'; html = vHoy();
@@ -1143,10 +1215,11 @@ function route() {
   if (v !== 'comida') comidaDia = null;
   if (v !== 'rutina') rDraft = null;
   if (v !== 'perfil' && v !== 'onboarding') wz = null;
+  if (v !== 'equipo') eqDraft = null;
   sheet.open = false;
   document.body.classList.remove('sheet-open');
   document.body.classList.toggle('no-nav', v === 'onboarding');
-  const navKey = { sesion: 'hoy', perfil: 'mas', biblioteca: 'mas', ej: 'mas', rutinas: 'mas', rutina: 'mas', alimentos: 'mas', alimento: 'mas' }[v] || v;
+  const navKey = { sesion: 'hoy', perfil: 'mas', biblioteca: 'mas', ej: 'mas', rutinas: 'mas', rutina: 'mas', alimentos: 'mas', alimento: 'mas', equipo: 'mas' }[v] || v;
   document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.v === navKey));
   document.body.dataset.sec = navKey;
   main.querySelectorAll('svg[data-anim]').forEach((s) => stops.push(Fig.mount(s, ANIMS[s.dataset.anim])));
@@ -1324,6 +1397,21 @@ const actions = {
     S.comidas[comidaDia] = [...diaComidas(comidaDia), ...prev.map((x, i) => ({ ...x, id: Date.now() + '' + i }))];
     save(true); toast('Comida copiada de ayer'); rerender();
   },
+  eqset(btn) {
+    const v = btn.dataset.v;
+    eqDraft.equipo = eqDraft.equipo.includes(v) ? eqDraft.equipo.filter((x) => x !== v) : [...eqDraft.equipo, v];
+    rerender();
+  },
+  eqlugar(btn) { eqDraft.lugar = btn.dataset.v; rerender(); },
+  eqsave() {
+    const d = eqDraft;
+    S.perfil = { ...S.perfil, lugar: d.lugar, equipo: d.lugar === 'casa' ? d.equipo : [], mancMax: num(d.mancMax), revisar: false };
+    eqDraft = null;
+    save(true);
+    toast('Equipamiento guardado y plan actualizado ✓');
+    location.hash = '#/plan';
+  },
+  libf(btn) { libMio = btn.dataset.v === '1'; rerender(); },
   wzset(btn) {
     const f = btn.dataset.f;
     let v = btn.dataset.v;
@@ -1485,6 +1573,8 @@ function init() {
     } else if (el.id === 'fq') {
       sheet.q = num(el.value) || 1;
       $('#fprev').textContent = prevTxt(sheet.food, sheet.q);
+    } else if (el.dataset.eq && eqDraft) {
+      eqDraft[el.dataset.eq] = el.value;
     } else if (el.dataset.wz && wz) {
       wz[el.dataset.wz] = el.value;
     } else if (el.dataset.rf && rDraft) {

@@ -134,7 +134,7 @@ const Fig = (() => {
   function propsSVG(anim, J, layer) {
     let s = '';
     for (const pr of anim.props || []) {
-      const fg = ['db', 'dbh', 'dbv', 'plate', 'bar', 'hbar', 'rope'].includes(pr.t);
+      const fg = ['db', 'dbh', 'dbv', 'plate', 'bar', 'hbar', 'rope', 'wheel'].includes(pr.t);
       if ((layer === 'fg') !== fg) continue;
       switch (pr.t) {
         case 'rect':
@@ -197,6 +197,11 @@ const Fig = (() => {
         case 'rope': { // cuerda para saltar
           const a = J.handL, b = J.handR, cy = 2 * J.ry - (a[1] + b[1]) / 2;
           s += `<path d="M${pt(a)} Q${f1(J.cx)} ${f1(cy)} ${pt(b)}" class="fig-cable" stroke-width="2.5" fill="none"/>`;
+          break;
+        }
+        case 'wheel': { // rueda abdominal
+          const c = J[pr.at];
+          s += `<circle cx="${f1(c[0])}" cy="${f1(c[1] + 8)}" r="10" class="fig-plate"/><circle cx="${f1(c[0])}" cy="${f1(c[1] + 8)}" r="3" class="fig-acc"/>`;
           break;
         }
         case 'bike':

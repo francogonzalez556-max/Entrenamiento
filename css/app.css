@@ -513,3 +513,14 @@ input[type=range] { accent-color: var(--acc); }
 .chips.days .chip { min-width: 54px; text-align: center; font-family: var(--display); font-weight: 400; font-size: 1.15rem; letter-spacing: .05em; }
 .lbl { display: block; font-size: .85rem; color: var(--mut); margin-bottom: 4px; }
 .row-link.nuevo { border-color: var(--acc); box-shadow: 0 0 20px -10px var(--acc); }
+
+/* v1.6: equipamiento */
+.card.accent-b { border-color: var(--acc); box-shadow: 0 0 22px -12px var(--acc); }
+.diff { padding: 8px 0; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.diff b { width: 100%; font-family: var(--display); font-weight: 400; font-size: 1.2rem; letter-spacing: .04em; }
+.diff .sale, .diff .entra { font-size: .82rem; padding: 3px 9px; border-radius: 999px; }
+.diff .sale { background: color-mix(in srgb, var(--bad) 18%, #151518); color: #ff9aa6; text-decoration: line-through; }
+.diff .entra { background: color-mix(in srgb, var(--good) 18%, #151518); color: var(--good); }
+.libi.nodisp { opacity: .45; }
+.wrap > .seg { margin-bottom: 4px; }
+.btn:disabled { opacity: .4; box-shadow: none; }
