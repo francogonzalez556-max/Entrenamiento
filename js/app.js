@@ -606,7 +606,15 @@ function recientes() {
 function buscar(q) {
   const w = normal(q).split(/\s+/).filter(Boolean);
   if (!w.length) return null;
-  return todosAlimentos().filter((a) => { const t = normal(a.n + ' ' + a.cat); return w.every((x) => t.includes(x)); }).slice(0, 40);
+  // cada palabra acepta también sus sinónimos (ej. "cafe" → capuchino, latte)
+  const alts = w.map((x) => [x, ...(SINONIMOS[x] || []).map(normal)]);
+  const qn = w.join(' ');
+  return todosAlimentos()
+    .map((a) => ({ a, t: normal(a.n + ' ' + a.cat), n: normal(a.n) }))
+    .filter(({ t }) => alts.every((opts) => opts.some((o) => t.includes(o))))
+    .sort((x, y) => (y.n.startsWith(qn) - x.n.startsWith(qn)) || (y.n.includes(qn) - x.n.includes(qn)))
+    .slice(0, 60)
+    .map(({ a }) => a);
 }
 const foodBtn = (a) => `<button class="fres-i" data-act="pickfood" data-id="${esc(a.id)}"><b>${esc(a.n)}</b><span>${esc(a.p)} · ${a.k} kcal · ${a.pr} g prot.</span></button>`;
 function resultadosHTML(q) {
@@ -617,6 +625,129 @@ function resultadosHTML(q) {
   if (S.propios.length) h += `<p class="fres-h">Mis alimentos</p>${S.propios.map(foodBtn).join('')}`;
   return h || '<p class="muted small">Escribe para buscar: marraqueta, huevo, cazuela, completo…</p>';
 }
+/* ---- Alimentos propios y escáner de código de barras ---- */
+function formAlimentoHTML(dr, o) {
+  const v = (x) => esc(x ?? '');
+  const aviso = dr.off
+    ? `<div class="okbanner">✓ Encontrado en Open Food Facts (código ${esc(dr.bc)}). <b>Revisa que coincida con la etiqueta</b> antes de guardar${dr.incompleto ? '; faltan las calorías, cópialas del envase' : ''}.</div>`
+    : dr.bc && !dr.id
+      ? `<div class="infobanner">No encontré el código ${esc(dr.bc)}${dr.offline ? ' (sin conexión a internet)' : ' en la base pública'}. Copia los datos de la etiqueta: quedará guardado y la próxima vez que lo escanees aparecerá de inmediato.</div>`
+      : '<p class="small muted">Copia los datos de la etiqueta del producto (por porción).</p>';
+  return `<form id="${o.id}" class="form">${aviso}
+    <input type="hidden" name="editId" value="${v(dr.id)}"><input type="hidden" name="bc" value="${v(dr.bc)}"><input type="hidden" name="u" value="${v(dr.u || 'g')}">
+    ${dr.per100 ? `<input type="hidden" name="k100" value="${v(dr.per100.k)}"><input type="hidden" name="pr100" value="${v(dr.per100.pr)}"><input type="hidden" name="c100" value="${v(dr.per100.c)}"><input type="hidden" name="g100" value="${v(dr.per100.g)}">
+    <p class="small muted">💡 Si cambias los gramos de la porción, las calorías y macros se recalculan solos.</p>` : ''}
+    <label>Nombre<input name="n" required value="${v(dr.n)}" placeholder="ej: Yogurt protein frutilla"></label>
+    <label>Porción<input name="p" required value="${v(dr.p)}" placeholder="ej: 1 unidad (155 g)"></label>
+    <div class="row2"><label>Calorías (kcal)<input name="k" type="text" inputmode="decimal" required value="${v(dr.k)}"></label><label>Proteína (g)<input name="pr" type="text" inputmode="decimal" value="${v(dr.pr ?? 0)}"></label></div>
+    <div class="row2"><label>Carbohidratos (g)<input name="c" type="text" inputmode="decimal" value="${v(dr.c ?? 0)}"></label><label>Grasas (g)<input name="g" type="text" inputmode="decimal" value="${v(dr.g ?? 0)}"></label></div>
+    <label>Gramos o ml de esa porción (para poder ingresar por peso)<input name="gp" type="text" inputmode="decimal" value="${v(dr.gp)}" placeholder="ej: 155"></label>
+    ${dr.bc ? `<p class="small muted">🏷️ Código de barras: ${esc(dr.bc)}</p>` : ''}
+    <button class="btn primary big">${o.boton}</button>
+    ${o.volver}</form>`;
+}
+function guardarAlimento(d) {
+  const a = { n: d.n.trim(), p: d.p.trim(), k: num(d.k) || 0, pr: num(d.pr) || 0, c: num(d.c) || 0, g: num(d.g) || 0, gp: num(d.gp) || null, u: d.u || 'g', cat: 'Mis alimentos', ...(d.bc ? { bc: d.bc } : {}) };
+  const i = d.editId ? S.propios.findIndex((x) => x.id === d.editId) : -1;
+  if (i >= 0) { a.id = d.editId; S.propios[i] = a; } else { a.id = 'u' + Date.now(); S.propios.push(a); }
+  save(true);
+  return a;
+}
+// Convierte un producto de Open Food Facts (valores por 100 g) a una porción de la app
+function desdeOFF(code, p) {
+  const n = p.nutriments || {};
+  const k100 = n['energy-kcal_100g'] ?? (n.energy_100g ? n.energy_100g / 4.184 : null);
+  const sq = num(p.serving_quantity);
+  const base = sq && sq > 0 && sq < 1000 ? sq : 100;
+  const f = base / 100;
+  const ml = /\d\s*(ml|cl|l)\b/i.test(`${p.quantity || ''} ${p.serving_size || ''}`);
+  const u = ml ? 'ml' : 'g';
+  const r = (x) => (x == null || x === '' ? '' : Math.round(x * f * 10) / 10);
+  const marca = p.brands ? p.brands.split(',')[0].trim() : '';
+  const base_n = p.product_name_es || p.product_name || p.generic_name || 'Producto';
+  const nombre = marca && !normal(base_n).includes(normal(marca)) ? `${base_n} · ${marca}` : base_n;
+  return { bc: code, n: nombre, p: base === 100 ? `100 ${u}` : `1 porción (${fmtN(base)} ${u})`, k: k100 == null ? '' : Math.round(k100 * f), pr: r(n.proteins_100g), c: r(n.carbohydrates_100g), g: r(n.fat_100g), gp: base, u, off: true, incompleto: k100 == null,
+    per100: { k: k100 == null ? '' : Math.round(k100), pr: n.proteins_100g ?? '', c: n.carbohydrates_100g ?? '', g: n.fat_100g ?? '' } };
+}
+let scanner = null, scanBusy = false, scanStop = Promise.resolve();
+const setScanMsg = (t) => { const el = $('#scanmsg'); if (el) el.textContent = t; };
+function cargarLectorCB() {
+  if (window.Html5Qrcode) return Promise.resolve();
+  return new Promise((ok, err) => {
+    const sc = document.createElement('script');
+    sc.src = 'js/vendor/html5-qrcode.min.js';
+    sc.onload = ok;
+    sc.onerror = err;
+    document.head.appendChild(sc);
+  });
+}
+const formatosCB = () => { const F = window.Html5QrcodeSupportedFormats; return [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E]; };
+function stopScanner() {
+  const sc = scanner;
+  scanner = null;
+  if (sc) scanStop = (async () => { try { if (sc.isScanning) await sc.stop(); sc.clear(); } catch (e) { /* ya detenido */ } })();
+  return scanStop;
+}
+async function startScanner() {
+  await scanStop;
+  if (scanner || !sheet.open || !sheet.scan || !$('#reader')) return;
+  scanBusy = false;
+  try {
+    await cargarLectorCB();
+    if (!sheet.open || !sheet.scan || !$('#reader')) return;
+    const sc = new window.Html5Qrcode('reader', { formatsToSupport: formatosCB(), verbose: false, experimentalFeatures: { useBarCodeDetectorIfSupported: true } });
+    scanner = sc;
+    await sc.start({ facingMode: 'environment' }, { fps: 10, qrbox: (w) => ({ width: Math.round(Math.max(120, Math.min(w * 0.9, 320))), height: 130 }) },
+      (txt) => { if (!scanBusy) { scanBusy = true; navigator.vibrate?.(80); buscarCodigo(txt); } }, () => {});
+  } catch (e) {
+    scanner = null;
+    setScanMsg('No se pudo abrir la cámara (revisa que la app tenga permiso de cámara). Puedes leer el código desde una foto o escribirlo.');
+  }
+}
+async function buscarCodigo(raw) {
+  const code = String(raw || '').replace(/\D/g, '');
+  if (code.length < 8) { setScanMsg('Ese código no parece válido (deben ser 8 a 14 números).'); scanBusy = false; return; }
+  await stopScanner();
+  if (!sheet.open) return;
+  const ya = S.propios.find((a) => a.bc === code);
+  if (ya) {
+    Object.assign(sheet, { scan: false, custom: false, draft: null, food: ya, q: 1, mode: 'u', gr: ya.gp || 100 });
+    renderSheet();
+    toast('Ya lo tenías en Mis alimentos');
+    return;
+  }
+  setScanMsg(`Buscando el código ${code}…`);
+  let draft;
+  try {
+    const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_es,generic_name,brands,quantity,serving_size,serving_quantity,nutriments`);
+    const j = await r.json();
+    draft = j.status === 1 && j.product ? desdeOFF(code, j.product) : { bc: code, p: '100 g', gp: 100 };
+  } catch (e) {
+    draft = { bc: code, p: '100 g', gp: 100, offline: true };
+  }
+  if (!sheet.open) return;
+  Object.assign(sheet, { scan: false, custom: true, draft });
+  renderSheet();
+}
+async function leerFoto(file) {
+  setScanMsg('Leyendo la foto…');
+  try {
+    await stopScanner();
+    await cargarLectorCB();
+    const h = new window.Html5Qrcode('reader', { formatsToSupport: formatosCB(), verbose: false });
+    const code = await h.scanFile(file, false);
+    try { h.clear(); } catch (e) { /* nada */ }
+    buscarCodigo(code);
+  } catch (e) {
+    setScanMsg('No encontré un código en la foto. Prueba con una más cercana y nítida, o escribe los números.');
+  }
+}
+const scanHTML = () => `<div id="reader" class="reader"></div>
+  <p class="small muted center" id="scanmsg">Apunta la cámara al código de barras del envase.</p>
+  <div class="inline"><input id="bcmanual" type="text" inputmode="numeric" placeholder="o escribe el código" aria-label="Código de barras"><button class="btn" data-act="bcbuscar">Buscar</button></div>
+  <label class="btn wide">📸 Leer desde una foto<input type="file" accept="image/*" id="bcfoto" hidden></label>
+  <button class="btn ghost big" data-act="scanclose">Volver</button>`;
+
 const prevTxt = (f, q) => `${Math.round(f.k * q)} kcal · ${r1(f.pr * q)} g proteína`;
 function sheetHTML() {
   if (!sheet.open) return '';
@@ -634,19 +765,15 @@ function sheetHTML() {
         <p class="prev" id="fprev">${prevTxt(f, q)}</p>`;
     body = `<div class="pick"><b class="pick-n">${esc(f.n)}</b><span class="muted small">Porción: ${esc(f.p)} = ${f.k} kcal${f.gp ? ` · ${fmtN(f.gp)} ${u}` : ''}</span>
       ${modo}${ctrl}
-      <button class="btn primary big" data-act="addfood">Agregar a ${meal[1]}</button>
-      <button class="btn ghost big" data-act="backfood">Elegir otro</button></div>`;
+      <button class="btn primary big" data-act="addfood">${sheet.editItem ? 'Guardar cambios' : `Agregar a ${meal[1]}`}</button>
+      ${sheet.editItem ? '<button class="btn ghost big" data-act="closesheet">Cancelar</button>' : '<button class="btn ghost big" data-act="backfood">Elegir otro</button>'}</div>`;
+  } else if (sheet.scan) {
+    body = scanHTML();
   } else if (sheet.custom) {
-    body = `<form id="fcustom" class="form"><p class="small muted">Copia los datos de la etiqueta del producto (por porción).</p>
-      <label>Nombre<input name="n" required></label>
-      <label>Porción<input name="p" placeholder="ej: 1 unidad (40 g)" required></label>
-      <div class="row2"><label>Calorías (kcal)<input name="k" type="text" inputmode="decimal" required></label><label>Proteína (g)<input name="pr" type="text" inputmode="decimal" value="0"></label></div>
-      <div class="row2"><label>Carbohidratos (g)<input name="c" type="text" inputmode="decimal" value="0"></label><label>Grasas (g)<input name="g" type="text" inputmode="decimal" value="0"></label></div>
-      <label>Gramos o ml de esa porción (opcional, para poder ingresar por peso)<input name="gp" type="text" inputmode="decimal" placeholder="ej: 40"></label>
-      <button class="btn primary big">Guardar y elegir cantidad</button>
-      <button type="button" class="btn ghost big" data-act="backfood">Volver</button></form>`;
+    body = formAlimentoHTML(sheet.draft || {}, { id: 'fcustom', boton: 'Guardar y elegir cantidad', volver: '<button type="button" class="btn ghost big" data-act="backfood">Volver</button>' });
   } else {
     body = `<input id="fsearch" type="search" placeholder="Buscar alimento…" autocomplete="off" value="${esc(sheet.q_)}">
+      <button class="btn scanbtn" data-act="scanopen">📷 Escanear código de barras</button>
       <div id="fres" class="fres">${resultadosHTML(sheet.q_)}</div>
       <button class="link" data-act="customfood">+ Crear alimento propio</button>`;
   }
@@ -656,9 +783,11 @@ function sheetHTML() {
 function renderSheet() {
   const el = $('#sheet');
   if (!el) return;
+  stopScanner();
   el.innerHTML = sheetHTML();
   el.classList.toggle('open', sheet.open);
   document.body.classList.toggle('sheet-open', sheet.open);
+  if (sheet.open && sheet.scan) startScanner();
 }
 
 function vComida() {
@@ -673,7 +802,7 @@ function vComida() {
     const its = items.filter((x) => x.m === m), tt = totales(its);
     const prev = diaComidas(ayer).filter((x) => x.m === m);
     return `<div class="card meal-c"><div class="mh"><h3>${ico} ${nom}</h3><b>${Math.round(tt.k)} kcal</b></div>
-      ${its.map((x) => `<div class="fi"><div class="grow"><b>${x.gr ? '' : fmtQ(x.q)}${esc(x.f.n)}</b><span class="small muted">${x.gr ? `${fmtN(x.gr)} ${x.f.u || 'g'}` : esc(x.f.p)} · ${Math.round(x.f.pr * x.q)} g prot.</span></div><span>${Math.round(x.f.k * x.q)}</span><button class="link danger" data-act="delfood" data-id="${x.id}" aria-label="Quitar">✕</button></div>`).join('')}
+      ${its.map((x) => `<div class="fi"><div class="grow tap" data-act="editfood" data-id="${x.id}"><b>${x.gr ? '' : fmtQ(x.q)}${esc(x.f.n)}</b><span class="small muted">${x.gr ? `${fmtN(x.gr)} ${x.f.u || 'g'}` : esc(x.f.p)} · ${Math.round(x.f.pr * x.q)} g prot.</span></div><span>${Math.round(x.f.k * x.q)}</span><button class="link danger" data-act="delfood" data-id="${x.id}" aria-label="Quitar">✕</button></div>`).join('')}
       <div class="btns"><button class="btn small-btn" data-act="opensheet" data-m="${m}">+ Agregar</button>${!its.length && prev.length ? `<button class="btn ghost small-btn" data-act="repetir" data-m="${m}">↺ Repetir de ayer (${Math.round(totales(prev).k)} kcal)</button>` : ''}</div></div>`;
   }).join('');
   const labs = [], vals = [];
@@ -698,6 +827,7 @@ function vComida() {
     <div class="card"><h3>📊 Últimos 14 días</h3>${chartBars(labs, vals, { min: o.kcal, hl: 13, goal: o.kcal, noVal: true, label: 'calorías por día' })}
       <p class="small muted">${prom ? `Promedio de los últimos 7 días con registro: <b>${prom.toLocaleString('es-CL')} kcal</b>. ` : ''}La línea punteada es tu meta (${o.kcal.toLocaleString('es-CL')} kcal).</p></div>
     <details class="card acc"><summary>¿Cómo se calcula tu meta?</summary><p>Gasto estimado: ~${o.tdee.toLocaleString('es-CL')} kcal/día (metabolismo basal ${o.bmr} kcal × actividad). Tu meta tiene un déficit de ~20% para bajar 0,5–0,8 kg por semana y se recalcula sola con tu último peso. Agua recomendada: ${o.agua} L/día.</p></details>
+    <a class="card row-link" href="#/alimentos"><span>🥫</span><div class="grow"><b>Mis alimentos</b><span class="small muted">Edita o borra los productos que creaste o escaneaste</span></div>›</a>
     <h2 class="sec">Claves</h2>
     ${CONSEJOS_COMIDA.map(([ti, de]) => `<details class="card acc"><summary>${ti}</summary><p>${de}</p></details>`).join('')}
     <p class="small muted center">Las calorías son aproximadas (porciones caseras). Para productos envasados, crea el alimento con los datos de la etiqueta.</p>
@@ -758,11 +888,27 @@ function vRutina(id) {
   </section>`;
 }
 
+/* ---- MIS ALIMENTOS ---- */
+function vAlimentos() {
+  const L = [...S.propios].sort((a, b) => a.n.localeCompare(b.n));
+  return `${header('Mis alimentos', '#/mas')}<section class="wrap">
+    <p class="small muted">Productos que creaste o escaneaste. Puedes corregir sus valores o eliminarlos; lo que ya registraste en días anteriores no cambia.</p>
+    ${L.length ? `<div class="card">${L.map((a) => `<div class="fi"><div class="grow"><b>${esc(a.n)}</b><span class="small muted">${esc(a.p)} · ${a.k} kcal · ${a.pr} g prot.${a.bc ? ' · 🏷️ ' + esc(a.bc) : ''}</span></div><a class="btn small-btn" href="#/alimento/${a.id}">Editar</a><button class="link danger" data-act="delpropio" data-id="${a.id}" aria-label="Eliminar">✕</button></div>`).join('')}</div>`
+      : '<div class="card"><p class="muted">Aún no tienes alimentos propios. Créalos o escanéalos desde Comida → + Agregar.</p></div>'}
+  </section>`;
+}
+function vAlimento(id) {
+  const a = S.propios.find((x) => x.id === id);
+  if (!a) return vAlimentos();
+  return `${header('Editar alimento', '#/alimentos')}<section class="wrap"><div class="card">${formAlimentoHTML(a, { id: 'fpropio', boton: 'Guardar cambios', volver: '<a class="btn ghost big" href="#/alimentos">Cancelar</a>' })}</div></section>`;
+}
+
 /* ---- MÁS ---- */
 function vMas() {
   return `${header('Más')}<section class="wrap">
     <a class="card row-link" href="#/biblioteca"><span>📚</span><div class="grow"><b>Ejercicios</b><span class="small muted">Técnica, animación y videos</span></div>›</a>
     <a class="card row-link" href="#/rutinas"><span>🧩</span><div class="grow"><b>Mis rutinas</b><span class="small muted">Crea rutinas y ejercicios propios</span></div>›</a>
+    <a class="card row-link" href="#/alimentos"><span>🥫</span><div class="grow"><b>Mis alimentos</b><span class="small muted">Productos creados o escaneados: editar o borrar</span></div>›</a>
     <a class="card row-link" href="#/perfil"><span>👤</span><div class="grow"><b>Mi perfil</b><span class="small muted">Edad, peso, meta, fecha de inicio</span></div>›</a>
     <div class="card"><h3>💾 Respaldo de datos</h3>
       <p class="small muted">Tus datos se guardan solo en este teléfono. Exporta un respaldo cada cierto tiempo (por ejemplo a Google Drive o WhatsApp).</p>
@@ -773,7 +919,7 @@ function vMas() {
       <p class="small"><b>Android (Chrome):</b> menú ⋮ → <i>Instalar aplicación</i> o <i>Agregar a pantalla principal</i>.<br><b>iPhone (Safari):</b> botón Compartir ⬆️ → <i>Agregar a inicio</i>.<br>Una vez instalada funciona sin internet (los videos sí requieren conexión).</p></div>
     <div class="card small-card"><h3>⚠️ Precauciones</h3><p class="small">Antes de empezar, idealmente hazte un chequeo médico general (presión, ECG si tienes antecedentes). Detén el ejercicio si sientes dolor en el pecho, mareo intenso o falta de aire desproporcionada. Dolor articular punzante = detente y ajusta.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">v1.1 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">v1.3 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 
@@ -812,6 +958,7 @@ function vEjercicio(id) {
 let ctx = {};
 function route() {
   stops.forEach((f) => f()); stops = [];
+  stopScanner();
   const main = $('#main');
   const h = location.hash.replace(/^#\/?/, '').split('/');
   let v = h[0] || 'hoy';
@@ -829,6 +976,8 @@ function route() {
     case 'biblioteca': html = vBiblioteca(); break;
     case 'ej': html = vEjercicio(h[1]); break;
     case 'rutinas': html = vRutinas(); break;
+    case 'alimentos': html = vAlimentos(); break;
+    case 'alimento': html = vAlimento(h[1]); break;
     case 'rutina': html = vRutina(h[1]); break;
     default: v = 'hoy'; html = vHoy();
   }
@@ -838,7 +987,7 @@ function route() {
   sheet.open = false;
   document.body.classList.remove('sheet-open');
   document.body.classList.toggle('no-nav', v === 'onboarding');
-  const navKey = { sesion: 'hoy', perfil: 'mas', biblioteca: 'mas', ej: 'mas', rutinas: 'mas', rutina: 'mas' }[v] || v;
+  const navKey = { sesion: 'hoy', perfil: 'mas', biblioteca: 'mas', ej: 'mas', rutinas: 'mas', rutina: 'mas', alimentos: 'mas', alimento: 'mas' }[v] || v;
   document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.v === navKey));
   main.querySelectorAll('svg[data-anim]').forEach((s) => stops.push(Fig.mount(s, ANIMS[s.dataset.anim])));
   keepAwake(v === 'sesion');
@@ -951,7 +1100,7 @@ const actions = {
     rerender();
   },
   opensheet(btn) {
-    Object.assign(sheet, { open: true, m: btn.dataset.m, food: null, q: 1, custom: false, q_: '' });
+    Object.assign(sheet, { open: true, m: btn.dataset.m, food: null, q: 1, custom: false, scan: false, draft: null, editItem: null, q_: '' });
     renderSheet();
   },
   closesheet() { sheet.open = false; renderSheet(); },
@@ -968,14 +1117,37 @@ const actions = {
   fmode(btn) { sheet.mode = btn.dataset.m; renderSheet(); },
   gstep(btn) { sheet.gr = Math.max(5, Math.round((sheet.gr + +btn.dataset.d) / 5) * 5); renderSheet(); },
   gset(btn) { sheet.gr = +btn.dataset.g; renderSheet(); },
-  backfood() { sheet.food = null; sheet.custom = false; renderSheet(); },
-  customfood() { sheet.custom = true; renderSheet(); },
+  backfood() { Object.assign(sheet, { food: null, custom: false, scan: false, draft: null }); renderSheet(); },
+  customfood() { Object.assign(sheet, { custom: true, draft: null }); renderSheet(); },
+  scanopen() { Object.assign(sheet, { scan: true, custom: false, food: null }); renderSheet(); },
+  scanclose() { sheet.scan = false; renderSheet(); },
+  bcbuscar() { buscarCodigo($('#bcmanual').value); },
+  editfood(el) {
+    const it = diaComidas(comidaDia).find((x) => x.id === el.dataset.id);
+    if (!it) return;
+    Object.assign(sheet, { open: true, m: it.m, food: it.f, q: it.q, mode: it.gr ? 'g' : 'u', gr: it.gr || it.f.gp || 100, custom: false, scan: false, draft: null, editItem: it.id, q_: '' });
+    renderSheet();
+  },
+  delpropio(btn) {
+    if (!confirm('¿Eliminar este alimento de Mis alimentos? Lo que ya registraste en días anteriores no cambia.')) return;
+    S.propios = S.propios.filter((a) => a.id !== btn.dataset.id);
+    save(true); rerender();
+  },
   addfood() {
     const { id, n, p, k, pr, c, g, gp, u } = sheet.food;
     const porPeso = gp && sheet.mode === 'g';
     const gr = porPeso ? num($('#fg').value) : null;
     if (porPeso && !gr) { toast('Ingresa la cantidad'); return; }
     const q = porPeso ? gr / gp : num($('#fq').value) || sheet.q;
+    if (sheet.editItem) {
+      const it = diaComidas(comidaDia).find((x) => x.id === sheet.editItem);
+      if (it) { it.q = q; if (porPeso) it.gr = gr; else delete it.gr; }
+      save(true);
+      sheet.open = false;
+      toast(`Cantidad actualizada · ${Math.round(k * q)} kcal`);
+      rerender();
+      return;
+    }
     (S.comidas[comidaDia] = S.comidas[comidaDia] || []).push({ id: Date.now() + '' + Math.floor(Math.random() * 1000), m: sheet.m, q, ...(porPeso ? { gr } : {}), f: { id, n, p, k, pr, c, g, gp: gp || null, u: u || 'g' } });
     save(true);
     sheet.open = false;
@@ -1109,6 +1281,15 @@ function init() {
     if (el.id === 'fsearch') {
       sheet.q_ = el.value;
       $('#fres').innerHTML = resultadosHTML(el.value);
+    } else if (el.name === 'gp' && el.form && el.form.elements.k100) {
+      // producto escaneado: recalcula la porción a partir de los valores por 100 g
+      const F = el.form.elements, gp = num(el.value);
+      if (gp > 0) {
+        const r = (x) => (num(x) == null ? '' : String(Math.round((num(x) * gp) / 100 * 10) / 10).replace('.', ','));
+        if (num(F.k100.value) != null) F.k.value = Math.round((num(F.k100.value) * gp) / 100);
+        F.pr.value = r(F.pr100.value); F.c.value = r(F.c100.value); F.g.value = r(F.g100.value);
+        F.p.value = `1 porción (${fmtN(gp)} ${F.u.value || 'g'})`;
+      }
     } else if (el.id === 'fg') {
       sheet.gr = num(el.value) || 0;
       $('#fprev').textContent = prevTxt(sheet.food, sheet.gr / sheet.food.gp);
@@ -1144,6 +1325,7 @@ function init() {
     const el = e.target;
     if (el.dataset.actChange === 'ejsel') { ejSel = el.value; rerender(); }
     if (el.dataset.rf === 'calent' && rDraft) rDraft.calent = el.checked;
+    if (el.id === 'bcfoto' && el.files[0]) leerFoto(el.files[0]);
     if (el.id === 'fimport' && el.files[0]) {
       const r = new FileReader();
       r.onload = () => {
@@ -1171,11 +1353,14 @@ function init() {
       location.hash = '#/hoy';
       if (first) route();
     } else if (f.id === 'fcustom') {
-      const a = { id: 'u' + Date.now(), n: d.n.trim(), p: d.p.trim(), k: num(d.k) || 0, pr: num(d.pr) || 0, c: num(d.c) || 0, g: num(d.g) || 0, gp: num(d.gp) || null, u: 'g', cat: 'Mis alimentos' };
-      S.propios.push(a);
-      save(true);
-      Object.assign(sheet, { custom: false, food: a, q: 1 });
+      const a = guardarAlimento(d);
+      toast(d.bc ? 'Producto guardado en Mis alimentos ✓' : 'Alimento guardado ✓');
+      Object.assign(sheet, { custom: false, draft: null, food: a, q: 1, mode: 'u', gr: a.gp || 100 });
       renderSheet();
+    } else if (f.id === 'fpropio') {
+      guardarAlimento(d);
+      toast('Alimento actualizado ✓');
+      location.hash = '#/alimentos';
     } else if (f.id === 'fejp') {
       S.ejPropios.push({ id: 'x' + Date.now().toString(36), nombre: d.nombre.trim(), peso: !!d.peso, tiempo: !!d.tiempo });
       save(true);
@@ -1199,6 +1384,14 @@ function init() {
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); window._installEvt = e; });
   navigator.storage?.persist?.().catch(() => {});
   route();
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    // Si llega una versión nueva mientras la app está abierta, recarga una vez para mostrarla
+    const habia = !!navigator.serviceWorker.controller;
+    let recargado = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (habia && !recargado) { recargado = true; save(true); location.reload(); }
+    });
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((r) => r.update()).catch(() => {});
+  }
 }
 document.addEventListener('DOMContentLoaded', init);

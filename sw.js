@@ -1,10 +1,10 @@
 /* Service worker: la app funciona sin internet.
    Con conexión siempre busca la versión más nueva (red primero);
    sin conexión usa la copia guardada. Al publicar cambios, sube VERSION. */
-const VERSION = 'entreno-v6';
+const VERSION = 'entreno-v8';
 const FILES = [
   './', './index.html', './manifest.webmanifest', './css/app.css',
-  './js/data.js', './js/foods.js', './js/anim.js', './js/app.js',
+  './js/data.js', './js/foods.js', './js/anim.js', './js/app.js', './js/vendor/html5-qrcode.min.js',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png',
 ];
 

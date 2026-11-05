@@ -320,3 +320,13 @@ body.sheet-open { overflow: hidden; }
 .rbtn .link:disabled { opacity: .3; }
 .btn.wide { width: 100%; margin-top: 8px; }
 .cgrid { grid-template-columns: repeat(3, 1fr); }
+
+/* v1.3: escáner y mis alimentos */
+.scanbtn { width: 100%; margin-top: 8px; }
+.reader { width: 100%; min-height: 200px; background: #000; border-radius: 14px; overflow: hidden; margin-bottom: 8px; }
+.reader video { width: 100% !important; height: auto !important; display: block; }
+.okbanner, .infobanner { padding: 10px 12px; border-radius: 10px; font-size: .88rem; margin-bottom: 12px; }
+.okbanner { background: color-mix(in srgb, var(--good) 15%, var(--card)); border-left: 4px solid var(--good); }
+.infobanner { background: color-mix(in srgb, var(--warn) 15%, var(--card)); border-left: 4px solid var(--warn); }
+.fi .tap { cursor: pointer; }
+.fi .small-btn { margin-top: 0; }
