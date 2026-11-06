@@ -106,7 +106,11 @@ function fcZonas() {
 function objetivos(p = S.perfil, kg = pesoActual()) {
   const bmr = 10 * kg + 6.25 * p.estatura - 5 * p.edad + (p.sexo === 'M' ? 5 : -161);
   const act = { sedentario: 1.25, ligero: 1.4, activo: 1.55, muy: 1.7 }[p.actividad] || 1.4;
-  const tdee = bmr * act;
+  const metF = { lento: 0.93, rapido: 1.07 }[p.metabolismo] || 1;
+  const tdeeForm = bmr * act * metF;
+  // con suficientes registros de peso y comida se usa el gasto real (60%) mezclado con la fórmula (40%)
+  const real = p === S.perfil && p.calibrar !== false ? metabolismoReal(bmr * act, tdeeForm) : null;
+  const tdee = real?.tdee ? real.tdee * 0.6 + tdeeForm * 0.4 : tdeeForm;
   const m2 = Math.pow(p.estatura / 100, 2), imc = kg / m2;
   const menor = p.edad < 18;
   let adj = { bajar: imc < 22 ? -0.1 : -0.2, musculo: 0.1, tonificar: 0, cardio: imc > 25 ? -0.1 : 0, salud: imc > 25 ? -0.1 : 0 }[p.objetivo] ?? -0.2;
@@ -119,7 +123,39 @@ function objetivos(p = S.perfil, kg = pesoActual()) {
   const prot = Math.round((ref * pf) / 5) * 5;
   const grasa = Math.round(Math.max(ref * 0.7, (kcal * 0.25) / 9) / 5) * 5;
   const carb = Math.max(0, Math.round((kcal - prot * 4 - grasa * 9) / 4 / 5) * 5);
-  return { kg, bmr: Math.round(bmr), tdee: Math.round(tdee / 10) * 10, kcal, prot, grasa, carb, agua: Math.min(3.5, r1(kg * 0.03)), adj, menor };
+  return { kg, bmr: Math.round(bmr), tdee: Math.round(tdee / 10) * 10, tdeeForm: Math.round(tdeeForm / 10) * 10, metF, real, kcal, prot, grasa, carb, agua: Math.min(3.5, r1(kg * 0.03)), adj, menor };
+}
+/* Gasto real = lo que comiste en promedio − lo que cambió tu peso (7.700 kcal ≈ 1 kg).
+   Requiere ≥14 días entre pesajes (últimas 5 semanas) y comida anotada en ≥80% de esos días. */
+function metabolismoReal(tdeePromedio, tdeeForm) {
+  const hoy = today();
+  const ps = [...(S.pesos || [])].filter((x) => dayDiff(x.fecha, hoy) <= 35).sort((a, b) => a.fecha.localeCompare(b.fecha));
+  if (ps.length < 2) return { faltan: 'pesos' };
+  const span = dayDiff(ps[0].fecha, ps[ps.length - 1].fecha);
+  if (span < 14) return { faltan: 'dias', span };
+  let n = 0, suma = 0;
+  for (let i = 0; i <= span; i++) {
+    const k = totales(diaComidas(iso(addDays(parse(ps[0].fecha), i)))).k;
+    if (k >= 800) { n++; suma += k; }
+  }
+  if (n / (span + 1) < 0.8) return { faltan: 'comidas', n, span };
+  const xs = ps.map((x) => dayDiff(ps[0].fecha, x.fecha)), ys = ps.map((x) => x.kg);
+  const mx = xs.reduce((a, b) => a + b, 0) / xs.length, my = ys.reduce((a, b) => a + b, 0) / ys.length;
+  const pend = xs.reduce((a, x, i) => a + (x - mx) * (ys[i] - my), 0) / xs.reduce((a, x) => a + (x - mx) ** 2, 0);
+  const ingesta = suma / n, tdee = ingesta - pend * 7700;
+  if (tdee < tdeeForm * 0.7 || tdee > tdeeForm * 1.35) return { fuera: true, n, ingesta, tdee };
+  const ratio = tdee / tdeePromedio;
+  return { tdee, n, ingesta, ritmoSem: pend * 7, clase: ratio < 0.93 ? 'más lento' : ratio > 1.07 ? 'más rápido' : 'normal', ratio };
+}
+function textoMetabolismo(o) {
+  const p = S.perfil, m = PERFIL_OPC.metabolismo.find((x) => x[0] === (p.metabolismo || 'normal'));
+  const r = o.real || {};
+  let t = `<p><b>Metabolismo declarado:</b> ${m[1]} ${m[2]}${o.metF !== 1 ? ` (${o.metF > 1 ? '+' : '−'}${Math.round(Math.abs(o.metF - 1) * 100)}% sobre la fórmula)` : ''}. Cámbialo en Mi perfil y objetivos.</p>`;
+  if (p.calibrar === false) t += '<p class="small muted">La calibración con tus registros está desactivada.</p>';
+  else if (r.tdee && !r.fuera) t += `<p><b>Gasto real según tus registros:</b> ~${Math.round(r.tdee / 10) * 10} kcal/día. Comiste en promedio ${Math.round(r.ingesta)} kcal en ${r.n} días anotados y tu peso cambió ${fmtN(r.ritmoSem, 2)} kg/semana. Tu metabolismo parece <b>${r.clase}</b> que el promedio para tu tamaño y actividad. Tu meta combina 60% este dato real + 40% la fórmula.</p>`;
+  else if (r.fuera) t += '<p class="small muted">Tus registros dan un gasto muy distinto al esperado, probablemente por comidas sin anotar o pesajes en distinta condición. Por ahora se usa la fórmula.</p>';
+  else t += `<p class="small muted">Para calcular tu gasto real necesito ${r.faltan === 'pesos' ? 'al menos 2 pesajes' : r.faltan === 'dias' ? 'pesajes separados por al menos 2 semanas' : `tus comidas anotadas en al menos 80% de los días (llevas ${r.n} de ${r.span + 1})`}. Anota todo lo que comes, incluidas bebidas y salsas.</p>`;
+  return t + `<button class="btn small-btn" data-act="calibrar">${p.calibrar === false ? 'Usar mis registros para calibrar' : 'No usar mis registros'}</button>`;
 }
 const textoMeta = (o) => (o.menor
   ? 'Como eres menor de 18, tu meta es de mantención (sin déficit): en crecimiento lo importante es comer bien y moverse.'
@@ -413,7 +449,7 @@ function wzInit() {
   const p = S.perfil || {};
   wz = {
     nombre: p.nombre || '', edad: p.edad ?? '', sexo: p.sexo || 'M', estatura: p.estatura ?? '', peso: S.perfil ? pesoActual() : '',
-    metaMin: p.metaMin ?? '', metaMax: p.metaMax ?? '', objetivo: p.objetivo || '', actividad: p.actividad || 'ligero',
+    metaMin: p.metaMin ?? '', metaMax: p.metaMax ?? '', objetivo: p.objetivo || '', actividad: p.actividad || 'ligero', metabolismo: p.metabolismo || 'normal',
     nivel: p.nivel || '', lugar: p.lugar || '', equipo: [...(p.equipo || [])], mancMax: p.mancMax ?? '',
     dias: [...(p.dias || [])], dur: p.dur || 45, limit: [...(p.limit || [])], inicio: p.inicio || today(),
     parq: p.parq?.resp ? [...p.parq.resp] : PARQ.map(() => null), embarazo: p.parq?.embarazo ?? null,
@@ -427,7 +463,7 @@ function perfilDesdeWz() {
   return {
     v: 2, nombre: String(w.nombre || '').trim(), edad: num(w.edad), sexo: w.sexo, estatura: num(w.estatura),
     peso: old.peso ?? num(w.peso), metaMin: conMeta ? Math.min(m1, m2) : null, metaMax: conMeta ? Math.max(m1, m2) : null,
-    objetivo: w.objetivo, actividad: w.actividad, nivel: w.nivel, lugar: w.lugar,
+    objetivo: w.objetivo, actividad: w.actividad, metabolismo: w.metabolismo, calibrar: old.calibrar, nivel: w.nivel, lugar: w.lugar,
     equipo: w.lugar === 'casa' ? w.equipo : [], mancMax: num(w.mancMax),
     dias: [...w.dias].sort((x, y) => ((x + 6) % 7) - ((y + 6) % 7)), dur: w.dur, limit: w.limit, inicio: w.inicio || today(),
     parq: { resp: w.parq, embarazo: necesitaEmbarazo(w) ? w.embarazo : null, fecha: today() },
@@ -468,7 +504,9 @@ function vWizard(first) {
   } else if (paso === 1) {
     body = `<h2>¿Qué quieres lograr?</h2><div class="opts">${PERFIL_OPC.objetivos.map((o) => card('objetivo', ...o)).join('')}</div>
       ${['bajar', 'musculo'].includes(w.objetivo) ? `<h3 class="mt">Peso meta (opcional)</h3><div class="row2">${inp('metaMin', 'Desde (kg)')}${inp('metaMax', 'Hasta (kg)')}</div>` : ''}
-      <h3 class="mt">Tu día a día (sin contar el entrenamiento)</h3><div class="opts compact">${PERFIL_OPC.actividad.map((o) => card('actividad', o[0], '', o[1], o[2])).join('')}</div>`;
+      <h3 class="mt">Tu día a día (sin contar el entrenamiento)</h3><div class="opts compact">${PERFIL_OPC.actividad.map((o) => card('actividad', o[0], '', o[1], o[2])).join('')}</div>
+      <h3 class="mt">¿Cómo es tu metabolismo?</h3><p class="small muted">Según tu experiencia. Si no lo sabes, la app lo calculará con tus registros de peso y comida.</p>
+      <div class="opts compact">${PERFIL_OPC.metabolismo.map((o) => card('metabolismo', ...o)).join('')}</div>`;
   } else if (paso === 2) {
     body = `<h2>¿Dónde entrenas?</h2><div class="opts two">${card('lugar', 'casa', '🏠', 'En casa', 'Con lo que tengas')}${card('lugar', 'gimnasio', '🏋️', 'Gimnasio', 'Máquinas, poleas y pesas')}</div>
       ${w.lugar === 'casa' ? `<h3 class="mt">¿Qué tienes en casa?</h3><p class="small muted">Marca todo lo que tengas. Si no tienes nada, igual armamos tu plan con peso corporal.</p>
@@ -1133,12 +1171,12 @@ function vComida() {
       <div class="pbar"><i style="width:${pct}%" class="${tot.k > o.kcal ? 'over' : ''}"></i></div>
       <p class="small">${rest >= 0 ? `Te quedan <b>${rest.toLocaleString('es-CL')} kcal</b> para hoy` : `Te pasaste por <b>${(-rest).toLocaleString('es-CL')} kcal</b>`}</p>
       <div class="macros macros3"><div><b>${Math.round(tot.pr)} / ${o.prot} g</b><span>Proteína</span></div><div><b>${Math.round(tot.c)} / ${o.carb} g</b><span>Carbohidratos</span></div><div><b>${Math.round(tot.g)} / ${o.grasa} g</b><span>Grasas</span></div></div>
-      <div class="pbar thin"><i style="width:${pctP}%" class="prot"></i></div><p class="small muted">Proteína: ${Math.round(pctP)}% de tu meta</p>
+      <div class="pbar thin"><i style="width:${pctP}%" class="prot"></i></div><p class="small muted">Proteína: ${Math.round(pctP)}% de tu meta${o.real?.tdee && !o.real.fuera ? ' · ⚙️ meta calibrada con tus registros' : ''}</p>
     </div>
     ${meals}
     <div class="card"><h3>📊 Últimos 14 días</h3>${chartBars(labs, vals, { min: o.kcal, hl: 13, goal: o.kcal, noVal: true, label: 'calorías por día' })}
       <p class="small muted">${prom ? `Promedio de los últimos 7 días con registro: <b>${prom.toLocaleString('es-CL')} kcal</b>. ` : ''}La línea punteada es tu meta (${o.kcal.toLocaleString('es-CL')} kcal).</p></div>
-    <details class="card acc"><summary>¿Cómo se calcula tu meta?</summary><p>Gasto estimado: ~${o.tdee.toLocaleString('es-CL')} kcal/día (metabolismo basal ${o.bmr} kcal × actividad). ${textoMeta(o)} Agua recomendada: ${o.agua} L/día.</p></details>
+    <details class="card acc"><summary>¿Cómo se calcula tu meta?</summary><p>Gasto estimado: ~${o.tdee.toLocaleString('es-CL')} kcal/día (metabolismo basal ${o.bmr} kcal × actividad${o.real?.tdee && !o.real.fuera ? ', calibrado con tus registros' : ''}). ${textoMeta(o)} Agua recomendada: ${o.agua} L/día.</p>${textoMetabolismo(o)}</details>
     <a class="card row-link" href="#/alimentos"><span>🥫</span><div class="grow"><b>Mis alimentos</b><span class="small muted">Edita o borra los productos que creaste o escaneaste</span></div>›</a>
     <h2 class="sec">Claves</h2>
     ${CONSEJOS_COMIDA.map(([ti, de]) => `<details class="card acc"><summary>${ti}</summary><p>${de}</p></details>`).join('')}
@@ -1594,7 +1632,7 @@ function vMas() {
       <p class="small"><b>Android (Chrome):</b> menú ⋮ → <i>Instalar aplicación</i> o <i>Agregar a pantalla principal</i>.<br><b>iPhone (Safari):</b> botón Compartir ⬆️ → <i>Agregar a inicio</i>.<br>Una vez instalada funciona sin internet (los videos sí requieren conexión).</p></div>
     <div class="card small-card"><h3>⚠️ Precauciones</h3><p class="small">Antes de empezar, idealmente hazte un chequeo médico general (presión, ECG si tienes antecedentes). Detén el ejercicio si sientes dolor en el pecho, mareo intenso o falta de aire desproporcionada. Dolor articular punzante = detente y ajusta.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">v1.9 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">v1.10 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 
@@ -2017,6 +2055,12 @@ const actions = {
     save(true); toast('Enfoque quitado'); rerender();
   },
   sermodo(btn) { serModo = btn.dataset.v; rerender(); },
+  calibrar() {
+    S.perfil.calibrar = S.perfil.calibrar === false;
+    save(true);
+    toast(S.perfil.calibrar ? 'Se usarán tus registros para calibrar' : 'Meta calculada solo con la fórmula');
+    rerender();
+  },
   autovol() {
     S.perfil.autoVol = !S.perfil.autoVol;
     save(true);

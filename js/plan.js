@@ -301,6 +301,12 @@ const PERFIL_OPC = {
     ['cardio', '🫀', 'Mejorar el cardio', 'Más resistencia y capacidad aeróbica'],
     ['salud', '🌱', 'Salud general', 'Moverse, sentirse bien y prevenir lesiones'],
   ],
+  metabolismo: [
+    ['lento', '🐢', 'Lento', 'Subo de peso con facilidad y me cuesta bajar'],
+    ['normal', '⚖️', 'Normal', 'Ni muy fácil ni muy difícil'],
+    ['rapido', '🔥', 'Rápido', 'Como bastante y me cuesta subir de peso'],
+    ['nose', '❓', 'No sé', 'La app lo calculará con tus registros'],
+  ],
   actividad: [
     ['sedentario', 'Sedentario', 'Trabajo sentado, poco movimiento'],
     ['ligero', 'Algo activo', 'Camino algo durante el día'],
