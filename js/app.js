@@ -938,7 +938,9 @@ function resultadosHTML(q) {
   if (r) return r.length ? r.map(foodBtn).join('') : `<p class="muted small">No encontré "${esc(q)}". Prueba con otra palabra o créalo abajo.</p>`;
   const rec = recientes();
   let h = rec.length ? `<p class="fres-h">Recientes</p>${rec.map(foodBtn).join('')}` : '';
-  if (S.propios.length) h += `<p class="fres-h">Mis alimentos</p>${S.propios.map(foodBtn).join('')}`;
+  const preps = S.propios.filter((a) => a.rec), mios = S.propios.filter((a) => !a.rec);
+  if (preps.length) h += `<p class="fres-h">Mis preparaciones</p>${preps.map(foodBtn).join('')}`;
+  if (mios.length) h += `<p class="fres-h">Mis alimentos</p>${mios.map(foodBtn).join('')}`;
   return h || '<p class="muted small">Escribe para buscar: marraqueta, huevo, cazuela, completo…</p>';
 }
 /* ---- Alimentos propios y escáner de código de barras ---- */
@@ -1141,24 +1143,116 @@ function sheetHTML() {
     body = `<div class="pick"><b class="pick-n">${esc(f.n)}</b><span class="muted small">Porción: ${esc(f.p)} = ${f.k} kcal${f.gp ? ` · ${fmtN(f.gp)} ${u}` : ''}</span>
       ${modo}${ctrl}
       <button class="btn primary big" data-act="addfood">${sheet.editItem ? 'Guardar cambios' : `Agregar a ${meal[1]}`}</button>
+      ${f.rec && !sheet.editItem ? `<button class="btn wide" data-act="recedit">🍳 Ver / editar ingredientes (${f.rec.ings.length})</button>` : ''}
       ${sheet.editItem ? '<button class="btn ghost big" data-act="closesheet">Cancelar</button>' : '<button class="btn ghost big" data-act="backfood">Elegir otro</button>'}</div>`;
   } else if (sheet.scan) {
     body = scanHTML();
   } else if (sheet.custom) {
     body = formAlimentoHTML(sheet.draft || {}, { id: 'fcustom', boton: 'Guardar y elegir cantidad', volver: '<button type="button" class="btn ghost big" data-act="backfood">Volver</button>' });
+  } else if (sheet.rec) {
+    body = recHTML();
   } else {
     body = `<input id="fsearch" type="search" placeholder="Buscar alimento…" autocomplete="off" value="${esc(sheet.q_)}">
       <button class="btn scanbtn" data-act="scanopen">📷 Escanear código de barras</button>
       <div id="fres" class="fres">${resultadosHTML(sheet.q_)}</div>
+      <button class="btn recbtn" data-act="recnew">🍳 Preparación con ingredientes</button>
       <button class="link" data-act="customfood">+ Crear alimento propio</button>`;
   }
   return `<div class="sheet-bg" data-act="closesheet"></div><div class="sheet-p" role="dialog" aria-label="Agregar alimento">
     <div class="sheet-h"><h3>${meal[2]} ${meal[1]}</h3><button class="link" data-act="closesheet" aria-label="Cerrar">✕</button></div>${body}</div>`;
 }
+/* ---- Preparaciones: ingredientes con marca y cantidad, totales automáticos ---- */
+// valores por 100 g/ml del alimento o de la marca elegida (null si no se conoce el peso)
+function per100(food, op) {
+  if (op && op.per) return op.per;
+  if (!food.gp) return null;
+  const f = 100 / food.gp;
+  return { k: food.k * f, pr: food.pr * f, c: (food.c || 0) * f, g: (food.g || 0) * f };
+}
+function opcionesMarca(food) {
+  const gr = grupoMarcas(food);
+  if (!gr) return null;
+  const ops = gr[3].map(([m, k, pr, c, g]) => ({ v: 'm:' + m, n: m, per: { k, pr, c, g } }));
+  // productos propios o escaneados del mismo tipo (ej. "Vienesa · PF") también son marcas
+  for (const p of S.propios) {
+    if (p.rec || !p.gp || p.id === food.id) continue;
+    const n = normal(p.n);
+    if (gr[1].some((k) => n.includes(k))) ops.push({ v: 'p:' + p.id, n: p.n, mio: true, ug: p.gp, per: { k: (p.k * 100) / p.gp, pr: (p.pr * 100) / p.gp, c: ((p.c || 0) * 100) / p.gp, g: ((p.g || 0) * 100) / p.gp } });
+  }
+  return { grupo: gr[0], ops };
+}
+const opDe = (ri) => (ri.marca && ri.marca !== 'prom' ? (opcionesMarca(ri.food)?.ops || []).find((o) => o.v === ri.marca) : null);
+function calcIng(ri) {
+  const op = opDe(ri), per = per100(ri.food, op), ug = ri.ug || ri.food.gp;
+  if (per && (ri.modo === 'g' || ug)) {
+    const gr = ri.modo === 'g' ? ri.gr || 0 : (ri.q || 0) * ug, f = gr / 100;
+    return { gr, k: per.k * f, pr: per.pr * f, c: per.c * f, g: per.g * f, marca: op ? op.n : null };
+  }
+  const q = ri.q || 0, fd = ri.food;
+  return { gr: null, k: fd.k * q, pr: fd.pr * q, c: (fd.c || 0) * q, g: (fd.g || 0) * q, marca: op ? op.n : null };
+}
+function totRec(R) {
+  return R.ings.reduce((a, x) => { a.k += x.k; a.pr += x.pr; a.c += x.c; a.g += x.g; if (x.gr != null) a.gr += x.gr; else a.sinPeso = true; return a; }, { k: 0, pr: 0, c: 0, g: 0, gr: 0, sinPeso: false });
+}
+function abrirIng(food) {
+  const snap = { id: food.id, n: food.n, p: food.p, k: food.k, pr: food.pr, c: food.c || 0, g: food.g || 0, gp: food.gp || null, u: food.u || 'g', cat: food.cat };
+  sheet.recIng = { food: snap, marca: 'prom', modo: 'u', q: 1, gr: Math.round(food.gp || 100), ug: food.gp || null, idx: null };
+  sheet.recFase = 'ing';
+}
+const prevIng = (x, u) => `${Math.round(x.k)} kcal · ${fmtN(x.pr)} g prot.${x.gr ? ` · ${fmtN(x.gr)} ${u}` : ''}`;
+function recPrevTxt() {
+  const R = sheet.rec, t = totRec(R), porc = num(R.porc) || 1, comi = num(R.comi) || 1;
+  if (!R.ings.length) return 'Agrega los ingredientes';
+  return `1 porción = ${Math.round(t.k / porc)} kcal · agregas ${Math.round((t.k / porc) * comi)} kcal`;
+}
+function recHTML() {
+  const R = sheet.rec;
+  if (sheet.recFase === 'buscar') {
+    return `<p class="small muted">Ingrediente para <b>${esc(R.n || 'tu preparación')}</b></p>
+      <input id="fsearch" type="search" placeholder="Buscar ingrediente… (vienesa, tomate, pan)" autocomplete="off" value="${esc(sheet.q_)}">
+      <button class="btn scanbtn" data-act="scanopen">📷 Escanear el envase (valor exacto)</button>
+      <div id="fres" class="fres">${resultadosHTML(sheet.q_)}</div>
+      <button class="link" data-act="customfood">+ Crear ingrediente propio</button>
+      <button class="btn ghost big" data-act="recfase" data-v="edit">Volver a la preparación</button>`;
+  }
+  if (sheet.recFase === 'ing' && sheet.recIng) {
+    const ri = sheet.recIng, fd = ri.food, u = fd.u || 'g', mo = opcionesMarca(fd), op = opDe(ri);
+    const puedeG = !!per100(fd, op), x = calcIng(ri);
+    const marcas = mo ? `<span class="lbl">¿Qué marca?</span><div class="chips marcas">${[{ v: 'prom', n: 'No sé · promedio' }, ...mo.ops].map((o) => `<button class="tab ${ri.marca === o.v ? 'on' : ''}" data-act="recmarca" data-v="${esc(o.v)}">${o.mio ? '🏷️ ' : ''}${esc(o.n)}</button>`).join('')}</div>
+      <p class="small muted">${ri.marca === 'prom' ? 'Sin marca se usa un valor estándar.' : op?.mio ? 'Valores de tu producto escaneado.' : 'Valor aproximado de la etiqueta de esa marca.'}</p>` : '';
+    const porG = puedeG && ri.modo === 'g';
+    const modo = puedeG ? `<div class="seg"><button class="${porG ? '' : 'on'}" data-act="rimodo" data-v="u">Cantidad</button><button class="${porG ? 'on' : ''}" data-act="rimodo" data-v="g">Por ${u === 'ml' ? 'ml' : 'peso (g)'}</button></div>` : '';
+    const ctrl = porG
+      ? `<div class="qty"><button class="btn" data-act="rig" data-d="-5" aria-label="Menos">−</button><input id="ri_g" type="text" inputmode="decimal" value="${fmtN(ri.gr)}" aria-label="Cantidad en ${u}"><span class="qu">${u}</span><button class="btn" data-act="rig" data-d="5" aria-label="Más">+</button></div>
+        <div class="chips">${[5, 10, 15, 30, 50, 100, 150].map((v) => `<button class="tab ${v === ri.gr ? 'on' : ''}" data-act="rigset" data-v="${v}">${v}</button>`).join('')}</div>`
+      : `<div class="qty"><button class="btn" data-act="riq" data-d="-0.5" aria-label="Menos">−</button><input id="ri_q" type="text" inputmode="decimal" value="${fmtN(ri.q, 2)}" aria-label="Cantidad"><button class="btn" data-act="riq" data-d="0.5" aria-label="Más">+</button></div>
+        <div class="chips">${[0.5, 1, 2, 3].map((v) => `<button class="tab ${v === ri.q ? 'on' : ''}" data-act="riqset" data-v="${v}">${String(v).replace('.', ',')}</button>`).join('')}</div>
+        <p class="small muted center">Cada una: ${esc(fd.p)}</p>${puedeG ? `<label class="inl small">Peso de cada una (${u})<input id="ri_ug" type="text" inputmode="decimal" value="${fmtN(ri.ug || fd.gp)}"></label>` : ''}`;
+    return `<div class="pick"><b class="pick-n">${esc(fd.n)}</b>${marcas}${modo}${ctrl}
+      <p class="prev" id="riprev">${prevIng(x, u)}</p>
+      <button class="btn primary big" data-act="ringok">${ri.idx != null ? 'Guardar ingrediente' : 'Agregar ingrediente'}</button>
+      <button class="btn ghost big" data-act="recfase" data-v="${ri.idx != null ? 'edit' : 'buscar'}">${ri.idx != null ? 'Cancelar' : 'Elegir otro'}</button></div>`;
+  }
+  const t = totRec(R), meal = COMIDAS_DIA.find((m) => m[0] === sheet.m);
+  const rows = R.ings.map((it, i) => `<div class="fi"><div class="grow tap" data-act="recingedit" data-i="${i}"><b>${esc(it.n)}${it.marca ? ` · ${esc(it.marca)}` : ''}</b><span class="small muted">${it.gr != null ? `${fmtN(it.gr)} ${it.u || 'g'}` : `${fmtN(it.q, 2)} × ${esc(it.food.p)}`} · ${fmtN(it.pr)} g prot.</span></div><span>${Math.round(it.k)}</span><button class="link danger" data-act="recdel" data-i="${i}" aria-label="Quitar">✕</button></div>`).join('');
+  return `<div class="form">
+    <label>Nombre de la preparación<input id="rnom" value="${esc(R.n)}" placeholder="ej: Completo en marraqueta" autocomplete="off"></label>
+    <div class="recings">${rows || '<p class="small muted">Agrega cada ingrediente con su cantidad o peso. Si tiene marca te la pregunto; si no la sabes, uso un valor promedio.</p>'}</div>
+    <button class="btn wide" data-act="recfase" data-v="buscar">+ Agregar ingrediente</button>
+    ${R.ings.length ? `<div class="rectot"><b>Total: ${Math.round(t.k)} kcal</b><span>${fmtN(t.pr)} g prot. · ${fmtN(t.c, 0)} g carb. · ${fmtN(t.g, 0)} g grasa${t.gr && !t.sinPeso ? ` · ${fmtN(t.gr)} g` : ''}</span></div>` : ''}
+    <div class="row2"><label>Rinde (porciones)<input id="rporc" type="text" inputmode="decimal" value="${fmtN(num(R.porc) || 1, 2)}"></label><label>Comiste (porciones)<input id="rcomi" type="text" inputmode="decimal" value="${fmtN(num(R.comi) || 1, 2)}"></label></div>
+    <p class="prev" id="rprev">${recPrevTxt()}</p>
+    <label class="chkl"><input type="checkbox" id="rguardar" ${R.guardar ? 'checked' : ''}> Guardar en Mis preparaciones para repetirla</label>
+    <button class="btn primary big" data-act="recok">${R.id ? 'Guardar y agregar' : `Agregar a ${meal[1]}`}</button>
+    <button class="btn ghost big" data-act="recsalir">Cancelar</button></div>`;
+}
+
 function renderSheet() {
   const el = $('#sheet');
   if (!el) return;
   stopScanner();
+  // dentro de una preparación, el alimento elegido (buscado, escaneado o creado) pasa a ser un ingrediente
+  if (sheet.rec && sheet.food) { abrirIng(sheet.food); sheet.food = null; }
   el.innerHTML = sheetHTML();
   el.classList.toggle('open', sheet.open);
   document.body.classList.toggle('sheet-open', sheet.open);
@@ -1269,8 +1363,8 @@ function vRutina(id) {
 function vAlimentos() {
   const L = [...S.propios].sort((a, b) => a.n.localeCompare(b.n));
   return `${header('Mis alimentos', '#/mas')}<section class="wrap">
-    <p class="small muted">Productos que creaste o escaneaste. Puedes corregir sus valores o eliminarlos; lo que ya registraste en días anteriores no cambia.</p>
-    ${L.length ? `<div class="card">${L.map((a) => `<div class="fi"><div class="grow"><b>${esc(a.n)}</b><span class="small muted">${esc(a.p)} · ${a.k} kcal · ${a.pr} g prot.${a.bc ? ' · 🏷️ ' + esc(a.bc) : ''}</span></div><a class="btn small-btn" href="#/alimento/${a.id}">Editar</a><button class="link danger" data-act="delpropio" data-id="${a.id}" aria-label="Eliminar">✕</button></div>`).join('')}</div>`
+    <p class="small muted">Productos que creaste o escaneaste y tus preparaciones 🍳. Puedes corregir sus valores o eliminarlos; lo que ya registraste en días anteriores no cambia. Las preparaciones se editan desde Comida → + Agregar → elígela → «Ver / editar ingredientes».</p>
+    ${L.length ? `<div class="card">${L.map((a) => `<div class="fi"><div class="grow"><b>${a.rec ? '🍳 ' : ''}${esc(a.n)}</b><span class="small muted">${esc(a.p)} · ${a.k} kcal · ${a.pr} g prot.${a.bc ? ' · 🏷️ ' + esc(a.bc) : ''}${a.rec ? ` · ${a.rec.ings.map((i) => esc(i.n + (i.marca ? ' ' + i.marca : ''))).join(', ')}` : ''}</span></div>${a.rec ? '' : `<a class="btn small-btn" href="#/alimento/${a.id}">Editar</a>`}<button class="link danger" data-act="delpropio" data-id="${a.id}" aria-label="Eliminar">✕</button></div>`).join('')}</div>`
       : '<div class="card"><p class="muted">Aún no tienes alimentos propios. Créalos o escanéalos desde Comida → + Agregar.</p></div>'}
   </section>`;
 }
@@ -1757,7 +1851,7 @@ function vMas() {
       <p class="small"><b>Android (Chrome):</b> menú ⋮ → <i>Instalar aplicación</i> o <i>Agregar a pantalla principal</i>.<br><b>iPhone (Safari):</b> botón Compartir ⬆️ → <i>Agregar a inicio</i>.<br>Una vez instalada funciona sin internet (los videos sí requieren conexión).</p></div>
     <div class="card small-card"><h3>⚠️ Precauciones</h3><p class="small">Antes de empezar, idealmente hazte un chequeo médico general (presión, ECG si tienes antecedentes). Detén el ejercicio si sientes dolor en el pecho, mareo intenso o falta de aire desproporcionada. Dolor articular punzante = detente y ajusta.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">v1.13 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">v1.14 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 
@@ -2162,7 +2256,7 @@ const actions = {
     rerender();
   },
   opensheet(btn) {
-    Object.assign(sheet, { open: true, m: btn.dataset.m, food: null, q: 1, custom: false, scan: false, draft: null, editItem: null, q_: '' });
+    Object.assign(sheet, { open: true, m: btn.dataset.m, food: null, q: 1, custom: false, scan: false, draft: null, editItem: null, q_: '', rec: null, recIng: null });
     renderSheet();
   },
   closesheet() { sheet.open = false; renderSheet(); },
@@ -2187,13 +2281,78 @@ const actions = {
   editfood(el) {
     const it = diaComidas(comidaDia).find((x) => x.id === el.dataset.id);
     if (!it) return;
-    Object.assign(sheet, { open: true, m: it.m, food: it.f, q: it.q, mode: it.gr ? 'g' : 'u', gr: it.gr || it.f.gp || 100, custom: false, scan: false, draft: null, editItem: it.id, q_: '' });
+    Object.assign(sheet, { open: true, m: it.m, food: it.f, q: it.q, mode: it.gr ? 'g' : 'u', gr: it.gr || it.f.gp || 100, custom: false, scan: false, draft: null, editItem: it.id, q_: '', rec: null, recIng: null });
     renderSheet();
   },
   delpropio(btn) {
     if (!confirm('¿Eliminar este alimento de Mis alimentos? Lo que ya registraste en días anteriores no cambia.')) return;
     S.propios = S.propios.filter((a) => a.id !== btn.dataset.id);
     save(true); rerender();
+  },
+  recnew() {
+    Object.assign(sheet, { rec: { id: null, n: sheet.q_ || '', porc: 1, comi: 1, ings: [], guardar: true }, recFase: 'edit', recIng: null, food: null, q_: '' });
+    renderSheet();
+  },
+  recedit() {
+    const f = sheet.food;
+    Object.assign(sheet, { rec: { id: f.id, n: f.n, porc: f.rec.porc || 1, comi: 1, ings: structuredClone(f.rec.ings), guardar: true }, recFase: 'edit', recIng: null, food: null, q_: '' });
+    renderSheet();
+  },
+  recfase(btn) {
+    sheet.recFase = btn.dataset.v;
+    if (btn.dataset.v === 'buscar') sheet.q_ = '';
+    sheet.recIng = null;
+    renderSheet();
+  },
+  recsalir() { Object.assign(sheet, { rec: null, recIng: null, q_: '' }); renderSheet(); },
+  recmarca(btn) {
+    const ri = sheet.recIng;
+    ri.marca = btn.dataset.v;
+    const op = opDe(ri);
+    ri.ug = op?.ug || ri.food.gp || ri.ug;
+    renderSheet();
+  },
+  rimodo(btn) { const ri = sheet.recIng; ri.modo = btn.dataset.v; renderSheet(); },
+  riq(btn) { const ri = sheet.recIng; ri.q = Math.max(0.25, Math.round(((ri.q || 0) + +btn.dataset.d) * 4) / 4); renderSheet(); },
+  riqset(btn) { sheet.recIng.q = +btn.dataset.v; renderSheet(); },
+  rig(btn) { const ri = sheet.recIng; ri.gr = Math.max(1, Math.round((ri.gr || 0) + +btn.dataset.d)); renderSheet(); },
+  rigset(btn) { sheet.recIng.gr = +btn.dataset.v; renderSheet(); },
+  ringok() {
+    const ri = sheet.recIng, x = calcIng(ri);
+    if (ri.modo === 'g' && per100(ri.food, opDe(ri)) ? !(ri.gr > 0) : !(ri.q > 0)) { toast('Ingresa la cantidad'); return; }
+    const it = { food: ri.food, n: ri.food.n, u: ri.food.u || 'g', marca: x.marca, mv: ri.marca, modo: ri.modo, q: ri.q, ug: ri.ug, gr: x.gr == null ? null : r1(x.gr), k: x.k, pr: x.pr, c: x.c, g: x.g };
+    const edit = ri.idx != null;
+    if (edit) sheet.rec.ings[ri.idx] = it; else sheet.rec.ings.push(it);
+    Object.assign(sheet, { recIng: null, recFase: 'edit' });
+    renderSheet();
+    toast(`${edit ? 'Actualizado:' : '+'} ${it.n}${it.marca ? ' · ' + it.marca : ''} · ${Math.round(it.k)} kcal`);
+  },
+  recingedit(el) {
+    const it = sheet.rec.ings[+el.dataset.i];
+    sheet.recIng = { food: it.food, marca: it.mv || 'prom', modo: it.modo || 'u', q: it.q || 1, gr: it.gr ?? Math.round(it.food.gp || 100), ug: it.ug || it.food.gp, idx: +el.dataset.i };
+    sheet.recFase = 'ing';
+    renderSheet();
+  },
+  recdel(btn) { sheet.rec.ings.splice(+btn.dataset.i, 1); renderSheet(); },
+  recok() {
+    const R = sheet.rec;
+    if (!R.ings.length) { toast('Agrega al menos un ingrediente'); return; }
+    const t = totRec(R), porc = num(R.porc) || 1, comi = num(R.comi) || 1;
+    const nombre = (R.n || '').trim() || 'Preparación casera';
+    const gp = !t.sinPeso && t.gr ? Math.round(t.gr / porc) : null;
+    const f = { n: nombre, p: gp ? `1 porción (${fmtN(gp)} g)` : '1 porción', k: Math.round(t.k / porc), pr: r1(t.pr / porc), c: r1(t.c / porc), g: r1(t.g / porc), gp, u: 'g' };
+    const guardar = $('#rguardar') ? $('#rguardar').checked : R.guardar;
+    if (guardar) {
+      const a = { ...f, cat: 'Mis preparaciones', rec: { porc, ings: R.ings } };
+      const i = R.id ? S.propios.findIndex((x) => x.id === R.id) : -1;
+      if (i >= 0) { a.id = R.id; S.propios[i] = a; } else { a.id = 'u' + Date.now(); S.propios.push(a); }
+      f.id = a.id;
+    } else f.id = 'r' + Date.now();
+    (S.comidas[comidaDia] = S.comidas[comidaDia] || []).push({ id: Date.now() + '' + Math.floor(Math.random() * 1000), m: sheet.m, q: comi, f });
+    save(true);
+    Object.assign(sheet, { open: false, rec: null, recIng: null });
+    toast(`+${Math.round(f.k * comi)} kcal · ${nombre}${guardar ? ' (guardada)' : ''}`);
+    rerender();
   },
   addfood() {
     const { id, n, p, k, pr, c, g, gp, u } = sheet.food;
@@ -2546,6 +2705,15 @@ function init() {
         F.pr.value = r(F.pr100.value); F.c.value = r(F.c100.value); F.g.value = r(F.g100.value);
         F.p.value = `1 porción (${fmtN(gp)} ${F.u.value || 'g'})`;
       }
+    } else if (el.id === 'rnom' && sheet.rec) {
+      sheet.rec.n = el.value;
+    } else if ((el.id === 'rporc' || el.id === 'rcomi') && sheet.rec) {
+      sheet.rec[el.id === 'rporc' ? 'porc' : 'comi'] = num(el.value) || 1;
+      $('#rprev').textContent = recPrevTxt();
+    } else if ((el.id === 'ri_q' || el.id === 'ri_g' || el.id === 'ri_ug') && sheet.recIng) {
+      const ri = sheet.recIng;
+      ri[{ ri_q: 'q', ri_g: 'gr', ri_ug: 'ug' }[el.id]] = num(el.value) || 0;
+      $('#riprev').textContent = prevIng(calcIng(ri), ri.food.u || 'g');
     } else if (el.id === 'fg') {
       sheet.gr = num(el.value) || 0;
       $('#fprev').textContent = prevTxt(sheet.food, sheet.gr / sheet.food.gp);

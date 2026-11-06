@@ -671,3 +671,16 @@ body { font-size: 1rem; }
 .fig-boxe { stroke: color-mix(in srgb, var(--prop) 70%, #000); stroke-width: .8; }
 .fig-ptop { fill: color-mix(in srgb, var(--prop) 78%, #fff); opacity: .9; }
 .fig-accp { fill: color-mix(in srgb, var(--acc) 45%, var(--bg2)); stroke: var(--acc); }
+
+/* ---- Preparaciones con ingredientes ---- */
+.recbtn { width: 100%; margin-top: 8px; border-color: var(--acc); color: var(--acc); font-weight: 700; }
+.recings { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 8px; }
+.rectot { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--acc) 12%, var(--card)); border: 1px solid color-mix(in srgb, var(--acc) 40%, transparent); margin: 10px 0; }
+.rectot b { color: var(--acc); font-size: 1.1rem; }
+.rectot span { font-size: .85rem; color: var(--mut); }
+.pick .chips .tab { white-space: nowrap; }
+.inl { display: flex !important; align-items: center; justify-content: center; gap: 8px; margin: 4px 0; }
+.inl input { width: 80px; text-align: center; }
+.chips.marcas { flex-wrap: wrap; gap: 6px; }
+.chips.marcas .tab { flex: 0 0 auto; padding: 8px 12px; font-family: inherit; font-weight: 600; text-transform: none; letter-spacing: 0; font-size: .85rem; }
+#rprev { font-size: 1.25rem; }
