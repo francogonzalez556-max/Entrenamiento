@@ -637,3 +637,12 @@ body { font-size: 1rem; }
 .sg.bajo .sg-bar i { background: var(--warn); }
 .sg.alto .sg-bar i { background: var(--bad); }
 .sg-nota { color: var(--acc2); }
+
+/* v1.11: mover sesiones */
+.pday { gap: 8px; }
+.pday-l { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; color: var(--tx); }
+.pday-l .grow { display: flex; flex-direction: column; }
+.mover { flex: 0 0 auto; width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--btnline); background: var(--btnbg); color: var(--acc); font-size: 1.1rem; font-weight: 800; cursor: pointer; }
+.movida { font-family: inherit; font-size: .7rem; font-weight: 700; color: var(--warn); margin-left: 4px; }
+.fres-i.actual { border-color: var(--acc); opacity: .75; }
+.fres-i:disabled { opacity: .4; }

@@ -28,14 +28,29 @@ const cicloHoy = () => (S.perfil?.inicio ? weekInfo(today()).ciclo : 1);
 function PLAN(ciclo = cicloHoy()) {
   const p = S.perfil || {};
   const enf = p.inicio ? enfoqueActivo(p) : null;
-  const k = JSON.stringify([p.objetivo, p.dias, p.lugar, p.equipo, p.nivel, p.dur, p.limit, ciclo, enf?.areas || null, !!p.autoVol]);
+  const k = JSON.stringify([p.objetivo, p.dias, p.lugar, p.equipo, p.nivel, p.dur, p.limit, ciclo, enf?.areas || null, !!p.autoVol, p.asignacion || null]);
   if (!_planes[k]) {
     let pl = generarPlan(p, ciclo);
     if (enf || p.autoVol) pl = ajustarVolumen(pl, p, enf?.areas || []);
+    if (p.asignacion) pl = aplicarAsignacion(structuredClone(pl), p.asignacion);
     _planes[k] = pl;
   }
   return _planes[k];
 }
+// Cambios permanentes de día: { sid: díaSemana }
+function aplicarAsignacion(pl, asg) {
+  for (const [sid, d] of Object.entries(asg)) if (pl.ses[sid]) pl.ses[sid].dow = +d;
+  const lun = (d) => (d + 6) % 7;
+  pl.orden.sort((a, b) => lun(pl.ses[a].dow) - lun(pl.ses[b].dow));
+  pl.dowSid = {};
+  for (const sid of pl.orden) pl.dowSid[pl.ses[sid].dow] = sid;
+  pl.dias = pl.orden.map((sid) => pl.ses[sid].dow);
+  return pl;
+}
+// Día de una sesión en una semana concreta (incluye cambios "solo esta semana")
+const diaDe = (sid, week) => (S.movidas?.[week]?.[sid] ?? PLAN().ses[sid]?.dow);
+const sidDelDia = (dow, week) => PLAN().orden.find((sid) => diaDe(sid, week) === dow);
+const ordenSemana = (week) => [...PLAN().orden].sort((a, b) => ((diaDe(a, week) + 6) % 7) - ((diaDe(b, week) + 6) % 7));
 let saveT;
 function save(now) {
   clearTimeout(saveT);
@@ -466,6 +481,7 @@ function perfilDesdeWz() {
     objetivo: w.objetivo, actividad: w.actividad, metabolismo: w.metabolismo, calibrar: old.calibrar, nivel: w.nivel, lugar: w.lugar,
     equipo: w.lugar === 'casa' ? w.equipo : [], mancMax: num(w.mancMax),
     dias: [...w.dias].sort((x, y) => ((x + 6) % 7) - ((y + 6) % 7)), dur: w.dur, limit: w.limit, inicio: w.inicio || today(),
+    asignacion: JSON.stringify([...w.dias].sort()) === JSON.stringify([...(old.dias || [])].sort()) ? old.asignacion : undefined,
     parq: { resp: w.parq, embarazo: necesitaEmbarazo(w) ? w.embarazo : null, fecha: today() },
     precaucion: w.parq.some((x) => x === true) || (necesitaEmbarazo(w) && w.embarazo === true),
   };
@@ -553,7 +569,7 @@ function vWizard(first) {
 /* ---- HOY ---- */
 function vHoy() {
   const t = today(), wi = weekInfo(t), dow = new Date().getDay();
-  const PL = PLAN(), sid = PL.dowSid[dow];
+  const PL = PLAN(), sid = sidDelDia(dow, wi.antes ? 1 : wi.week);
   const fz = fcZonas();
   const kg = pesoActual(), p = S.perfil;
   const perd = r1(p.peso - kg);
@@ -578,17 +594,20 @@ function vHoy() {
       <a class="btn primary big" href="#/sesion/${t}/${sid}">${st === 'done' ? 'Ver sesión' : st === 'prog' ? 'Continuar' : 'Empezar entrenamiento'}</a>
     </div>`;
   } else {
-    const next = PL.dias.map((d) => (d - dow + 7) % 7 || 7).sort((a, b) => a - b)[0];
-    const nd = addDays(new Date(), next);
+    let prox = null;
+    for (let i = 1; i <= 14 && !prox; i++) {
+      const nd = addDays(new Date(), i), ns = sidDelDia(nd.getDay(), weekInfo(iso(nd)).week);
+      if (ns) prox = { nd, ns };
+    }
     main = `<div class="card rest"><div class="tag">Descanso</div><h2>Hoy recuperas 😌</h2>
       <p>El músculo se construye descansando. Opcional: <b>caminata de 20-40 min en plano</b> o movilidad suave.</p>
-      <p class="muted">Próxima sesión: <b>${DIAS[nd.getDay()]}</b> · ${PL.ses[PL.dowSid[nd.getDay()]].nombre}</p></div>`;
+      ${prox ? `<p class="muted">Próxima sesión: <b>${DIAS[prox.nd.getDay()]}</b> · ${PL.ses[prox.ns].nombre}</p>` : ''}</div>`;
   }
 
-  const dots = PL.orden.map((s) => {
-    const d = dateOf(semana, PL.ses[s].dow);
+  const dots = ordenSemana(semana).map((s) => {
+    const d = dateOf(semana, diaDe(s, semana));
     const ok = doneEnSemana(semana, s);
-    return `<a class="wd ${ok ? 'ok' : ''} ${d === t ? 'now' : ''}" href="#/sesion/${d <= t ? t : d}/${s}"><b>${DIAS[PL.ses[s].dow].slice(0, 3)}</b><span>${ok ? '✓' : PL.ses[s].nombre.split(' ')[0]}</span></a>`;
+    return `<a class="wd ${ok ? 'ok' : ''} ${d === t ? 'now' : ''}" href="#/sesion/${d <= t ? t : d}/${s}"><b>${DIAS[diaDe(s, semana)].slice(0, 3)}</b><span>${ok ? '✓' : PL.ses[s].nombre.split(' ')[0]}</span></a>`;
   }).join('');
 
   return `${header(p.nombre ? `¡A darle, ${esc(p.nombre.split(' ')[0])}! 🔥` : '¡A darle! 🔥')}
@@ -719,28 +738,31 @@ function vPlan() {
   const wi = weekInfo(dateOf(week, 1));
   const fases = FASES.map((f) => `<div class="fase ${f.n === wi.phase ? 'on' : ''}"><b>Fase ${f.n} · ${f.nombre}</b><span class="muted small">Semanas ${f.semanas}</span><p class="small">${f.desc}</p></div>`).join('');
   const dias = [1, 2, 3, 4, 5, 6, 0].map((dow) => {
-    const d = dateOf(week, dow), sid = PLAN().dowSid[dow];
+    const d = dateOf(week, dow), sid = sidDelDia(dow, week);
     if (!sid) {
       return `<div class="pday rest ${d === t ? 'now' : ''}"><div class="pd"><b>${DIAS[dow].slice(0, 3)}</b><span>${fmt(d)}</span></div><div class="grow muted small">Descanso · opcional: caminata 20-40 min (regístrala en Hoy)</div></div>`;
     }
+    const movida = S.movidas?.[week]?.[sid] !== undefined && S.movidas[week][sid] !== PLAN().ses[sid].dow;
     const ses = PLAN().ses[sid], ok = doneEnSemana(week, sid);
     const its = itemsDe(sid, wi, d);
     const cardio = its.filter((x) => x.k === 'cardio').map((x) => x.rx.titulo).join(' + ');
     const nEj = its.filter((x) => x.k === 'ex').length;
-    return `<a class="pday ${ok ? 'ok' : ''} ${d === t ? 'now' : ''}" href="#/sesion/${d}/${sid}"><div class="pd"><b>${DIAS[dow].slice(0, 3)}</b><span>${fmt(d)}</span></div>
-      <div class="grow"><b>${ses.nombre}</b><span class="small muted">${nEj} ejercicios · ${cardio}</span></div><span class="st">${ok ? '✓' : '›'}</span></a>`;
+    return `<div class="pday ${ok ? 'ok' : ''} ${d === t ? 'now' : ''}"><a class="pday-l" href="#/sesion/${d}/${sid}"><div class="pd"><b>${DIAS[dow].slice(0, 3)}</b><span>${fmt(d)}</span></div>
+      <div class="grow"><b>${ses.nombre}${movida ? ' <span class="movida">↪ movida</span>' : ''}</b><span class="small muted">${nEj} ejercicios · ${cardio}</span></div><span class="st">${ok ? '✓' : '›'}</span></a>
+      ${ok ? '' : `<button class="mover" data-act="moveropen" data-sid="${sid}" data-w="${week}" aria-label="Mover ${esc(ses.nombre)}">⇄</button>`}</div>`;
   }).join('');
   return `${header('Plan')}<section class="wrap">
     <div class="weeknav"><button class="btn ghost" data-act="pw" data-d="-1" ${week <= 1 ? 'disabled' : ''}>‹</button><div><b>Semana ${wi.wk}</b>${wi.ciclo > 1 ? ` <span class="small">(ciclo ${wi.ciclo})</span>` : ''}<span class="small muted">${fmt(dateOf(week, 1))} – ${fmt(dateOf(week, 0))}${week === cur ? ' · actual' : ''}</span></div><button class="btn ghost" data-act="pw" data-d="1">›</button></div>
     ${wi.deload ? '<div class="hint warn">Semana de descarga: 1 serie menos por ejercicio y pesos cómodos. Recupera para volver más fuerte.</div>' : ''}
     <div class="card pweek">${dias}</div>
+    <p class="small muted">Toca <b>⇄</b> para mover una sesión a otro día o intercambiarla con otra.${S.movidas?.[week] && Object.keys(S.movidas[week]).length ? ` <button class="link small" data-act="resetsemana" data-w="${week}">Restablecer los días de esta semana</button>` : ''}</p>
     <h2 class="sec">Las 3 fases</h2>${fases}
     <a class="card row-link" href="#/enfoque"><span>🎯</span><div class="grow"><b>${enfoqueActivo() ? `Enfoque: ${nombresEnf(enfoqueActivo().areas)}` : 'Elegir un enfoque'}</b><span class="small muted">${enfoqueActivo() ? `Hasta el ${fmt(enfoqueActivo().hasta)}` : 'Prioriza zonas por unas semanas'}</span></div>›</a>
     <a class="card row-link" href="#/series"><span>📊</span><div class="grow"><b>Calculadora de series</b><span class="small muted">Volumen semanal por músculo</span></div>›</a>
     <a class="card row-link" href="#/equipo"><span>🧰</span><div class="grow"><b>¿Tienes equipo nuevo?</b><span class="small muted">Agrégalo y actualiza tu plan</span></div>›</a>
     <a class="card row-link" href="#/rutinas"><span>🧩</span><div class="grow"><b>Rutinas personalizadas</b><span class="small muted">Crea las tuyas y hazlas cualquier día</span></div>›</a>
     <div class="card small-card"><h3>Cómo progresar</h3><p class="small">Usa <b>doble progresión</b>: cuando completes todas las series en el máximo del rango (ej. 3×15), sube el peso en la próxima sesión y vuelve al mínimo del rango. La app te avisa con ⬆️. En el cardio, los minutos suben automáticamente cada semana.</p></div>
-  </section>`;
+  </section><div id="modal" class="sheet"></div>`;
 }
 
 /* ---- PROGRESO ---- */
@@ -775,7 +797,7 @@ function vProgreso() {
   }
   let grid = '';
   for (let w = Math.max(1, cur - 11); w <= cur; w++) {
-    grid += `<div class="grow-row" style="grid-template-columns:40px repeat(${PL.orden.length},1fr)"><span class="small muted">S${((w - 1) % 12) + 1}</span>${PL.orden.map((s) => `<i class="${doneEnSemana(w, s) ? 'on' : dateOf(w, PL.ses[s].dow) < t ? 'miss' : ''}" title="${PL.ses[s].nombre}"></i>`).join('')}</div>`;
+    grid += `<div class="grow-row" style="grid-template-columns:40px repeat(${PL.orden.length},1fr)"><span class="small muted">S${((w - 1) % 12) + 1}</span>${PL.orden.map((s) => `<i class="${doneEnSemana(w, s) ? 'on' : dateOf(w, diaDe(s, w)) < t ? 'miss' : ''}" title="${PL.ses[s].nombre}"></i>`).join('')}</div>`;
   }
   const L = logsOrdenados();
   const conEj = [...Object.keys(EJERCICIOS), ...S.ejPropios.map((e) => e.id)].filter((id) => L.some((l) => l.ex[id]?.sets.some((s) => s.ok)));
@@ -1311,6 +1333,23 @@ function vEquipo() {
   </section>`;
 }
 
+/* ---- Mover sesiones ---- */
+let moverAlcance = 'semana';
+function abrirMover(sid, w) {
+  const PL = PLAN(), cur = moverAlcance === 'semana' ? diaDe(sid, w) : PL.ses[sid].dow, t = today();
+  const opciones = [1, 2, 3, 4, 5, 6, 0].map((d) => {
+    const otro = moverAlcance === 'semana' ? sidDelDia(d, w) : PL.dowSid[d];
+    const fecha = dateOf(w, d);
+    const hecha = otro && doneEnSemana(w, otro);
+    if (d === cur) return `<div class="fres-i actual"><b>${DIAS[d]}${moverAlcance === 'semana' ? ` ${fmt(fecha)}` : ''}</b><span>Día actual de ${esc(PL.ses[sid].nombre)}</span></div>`;
+    return `<button class="fres-i" data-act="moverdia" data-sid="${sid}" data-w="${w}" data-d="${d}" ${hecha ? 'disabled' : ''}><b>${DIAS[d]}${moverAlcance === 'semana' ? ` ${fmt(fecha)}` : ''}${moverAlcance === 'semana' && fecha < t ? ' (ya pasó)' : ''}</b>
+      <span>${otro ? (hecha ? `${esc(PL.ses[otro].nombre)} ya está hecha` : `⇄ Intercambiar con ${esc(PL.ses[otro].nombre)}`) : 'Libre: mover aquí'}</span></button>`;
+  }).join('');
+  openModal(`⇄ Mover ${esc(PL.ses[sid].nombre)}`, `<div class="seg"><button class="${moverAlcance === 'semana' ? 'on' : ''}" data-act="moveralc" data-v="semana" data-sid="${sid}" data-w="${w}">Solo esta semana</button><button class="${moverAlcance === 'siempre' ? 'on' : ''}" data-act="moveralc" data-v="siempre" data-sid="${sid}" data-w="${w}">Todas las semanas</button></div>
+    <p class="small muted">${moverAlcance === 'semana' ? 'El cambio aplica solo a esta semana; la siguiente vuelve a tus días habituales.' : 'Cambia tu calendario fijo. También actualiza tus días en el perfil.'}</p>
+    <div class="fres">${opciones}</div>`);
+}
+
 /* ---- Modal genérico ---- */
 function openModal(titulo, body) {
   const el = $('#modal');
@@ -1632,7 +1671,7 @@ function vMas() {
       <p class="small"><b>Android (Chrome):</b> menú ⋮ → <i>Instalar aplicación</i> o <i>Agregar a pantalla principal</i>.<br><b>iPhone (Safari):</b> botón Compartir ⬆️ → <i>Agregar a inicio</i>.<br>Una vez instalada funciona sin internet (los videos sí requieren conexión).</p></div>
     <div class="card small-card"><h3>⚠️ Precauciones</h3><p class="small">Antes de empezar, idealmente hazte un chequeo médico general (presión, ECG si tienes antecedentes). Detén el ejercicio si sientes dolor en el pecho, mareo intenso o falta de aire desproporcionada. Dolor articular punzante = detente y ajusta.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">v1.10 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">v1.11 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 
@@ -1953,6 +1992,31 @@ const actions = {
   },
   finishforce(btn, e) { actions.finish(btn, e, true); },
   pw(btn) { planOffset += +btn.dataset.d; rerender(); },
+  moveropen(btn) { abrirMover(btn.dataset.sid, +btn.dataset.w); },
+  moveralc(btn) { moverAlcance = btn.dataset.v; abrirMover(btn.dataset.sid, +btn.dataset.w); },
+  moverdia(btn) {
+    const sid = btn.dataset.sid, w = +btn.dataset.w, d = +btn.dataset.d;
+    const PL = PLAN(), nombre = PL.ses[sid].nombre;
+    if (moverAlcance === 'semana') {
+      const cur = diaDe(sid, w), otro = sidDelDia(d, w);
+      S.movidas = S.movidas || {};
+      const m = (S.movidas[w] = S.movidas[w] || {});
+      m[sid] = d;
+      if (otro && otro !== sid) m[otro] = cur;
+      toast(otro ? `Intercambiadas esta semana: ${nombre} ⇄ ${PL.ses[otro].nombre}` : `${nombre} movida al ${DIAS[d].toLowerCase()} (solo esta semana)`);
+    } else {
+      const p = S.perfil, cur = PL.ses[sid].dow, otro = PL.dowSid[d];
+      const asg = { ...(p.asignacion || {}) };
+      for (const x of PL.orden) asg[x] = PL.ses[x].dow;
+      asg[sid] = d;
+      if (otro && otro !== sid) asg[otro] = cur;
+      else p.dias = p.dias.map((x) => (x === cur ? d : x));
+      p.asignacion = asg;
+      toast(otro ? `Desde ahora: ${nombre} el ${DIAS[d].toLowerCase()} y ${PL.ses[otro].nombre} el ${DIAS[cur].toLowerCase()}` : `Desde ahora ${nombre} es los ${DIAS[d].toLowerCase()}`);
+    }
+    save(true); closeModal(); rerender();
+  },
+  resetsemana(btn) { delete S.movidas[btn.dataset.w]; save(true); toast('Días de la semana restablecidos'); rerender(); },
   delpeso(btn) {
     if (!confirm('¿Eliminar este registro de peso?')) return;
     S.pesos = S.pesos.filter((x) => x.fecha !== btn.dataset.f);
