@@ -132,7 +132,7 @@ const ANIMS = {
     dur: 1400,
   },
   abduccion_cadera: {
-    props: [],
+    props: [], lat: 'y',
     base: { hip: [128, 158], torso: 180, footN: 0, footF: 0, leg: { f: { a: [2, 0] } }, arm: { n: { a: [2, 2] }, f: { a: [180, 180] } } },
     frames: [{ leg: { n: { a: [1, 0] } }, hold: 300 }, { leg: { n: { a: [-28, -28] } }, hold: 500 }],
     dur: 1300,

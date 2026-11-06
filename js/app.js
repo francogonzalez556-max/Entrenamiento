@@ -1757,7 +1757,7 @@ function vMas() {
       <p class="small"><b>Android (Chrome):</b> menú ⋮ → <i>Instalar aplicación</i> o <i>Agregar a pantalla principal</i>.<br><b>iPhone (Safari):</b> botón Compartir ⬆️ → <i>Agregar a inicio</i>.<br>Una vez instalada funciona sin internet (los videos sí requieren conexión).</p></div>
     <div class="card small-card"><h3>⚠️ Precauciones</h3><p class="small">Antes de empezar, idealmente hazte un chequeo médico general (presión, ECG si tienes antecedentes). Detén el ejercicio si sientes dolor en el pecho, mareo intenso o falta de aire desproporcionada. Dolor articular punzante = detente y ajusta.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">v1.12 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">v1.13 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 
@@ -1778,7 +1778,7 @@ function vBiblioteca() {
 function techHTML(id) {
   const e = getEj(id);
   if (e.propio) return `<p class="small muted">Ejercicio propio (sin animación).</p><a class="btn yt" href="https://www.youtube.com/results?search_query=${encodeURIComponent(e.yt)}" target="_blank" rel="noopener">▶ Buscar videos en YouTube</a>`;
-  return `<div class="anim-wrap"><svg class="fig big" data-anim="${id}"></svg></div>
+  return `<div class="anim-wrap a3d" data-a3d="${id}"></div>
     <p class="small"><b>Músculos:</b> ${e.musculos}<br><b>Equipo:</b> ${e.equipo}</p>
     <h4>Paso a paso</h4><ol>${e.pasos.map((x) => `<li>${x}</li>`).join('')}</ol>
     <h4>Errores comunes</h4><ul class="x">${e.errores.map((x) => `<li>${x}</li>`).join('')}</ul>
@@ -1867,6 +1867,7 @@ function route() {
   document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.v === navKey));
   document.body.dataset.sec = navKey;
   main.querySelectorAll('svg[data-anim]').forEach((s) => stops.push(Fig.mount(s, ANIMS[s.dataset.anim])));
+  main.querySelectorAll('[data-a3d]').forEach((b) => stops.push(Fig3D.mount(b, ANIMS[b.dataset.a3d])));
   keepAwake(v === 'sesion' || v === 'timer');
   if (v !== 'sesion') stopTimer();
   window.scrollTo(0, 0);
@@ -2059,7 +2060,8 @@ const actions = {
     if (open) {
       box.innerHTML = techHTML(id);
       box.classList.add('open');
-      stops.push(Fig.mount(box.querySelector('svg'), ANIMS[id]));
+      const a3 = box.querySelector('[data-a3d]');
+      if (a3) stops.push(Fig3D.mount(a3, ANIMS[id]));
     }
   },
   finish(btn, e, forzar) {

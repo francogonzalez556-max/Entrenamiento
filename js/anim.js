@@ -280,5 +280,5 @@ const Fig = (() => {
     return `<svg viewBox="${VB}" class="fig" aria-hidden="true">${draw(anim, f)}</svg>`;
   }
 
-  return { mount, still, VB };
+  return { mount, still, VB, _int: { tlOf, poseAt, sideJoints, frontJoints, L, G } };
 })();

@@ -76,7 +76,7 @@ Object.assign(ANIMS, {
     dur: 1100,
   },
   superman: {
-    props: [],
+    props: [], face: -1,
     base: { hip: [120, 160], footN: 80 },
     frames: [
       { torso: 180, leg: { n: { a: [0, 0] } }, arm: { n: { a: [180, 180] } }, hold: 300 },

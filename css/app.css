@@ -651,3 +651,23 @@ body { font-size: 1rem; }
 .invlink { font-size: .8rem; word-break: break-all; background: var(--input); border: 1px solid var(--line); border-radius: 10px; padding: 10px; margin: 6px 0; }
 .invcode { font-family: ui-monospace, Menlo, monospace; font-size: 1rem; letter-spacing: .04em; }
 .bloqueo .hero p { max-width: 420px; margin-left: auto; margin-right: auto; }
+
+/* ---- Figura 3D giratoria ---- */
+.a3d { position: relative; padding: 6px 6px 8px; }
+.a3d-svg { touch-action: pan-y; cursor: grab; user-select: none; -webkit-user-select: none; }
+.a3d-svg:active { cursor: grabbing; }
+.a3d-vistas { display: flex; gap: 4px; margin-top: 4px; }
+.a3d-vistas button, .a3d-ctl button { flex: 1; min-height: 34px; padding: 4px 6px; border-radius: 9px; border: 1px solid var(--line); background: var(--bg); color: var(--tx); font: inherit; font-size: .85rem; font-weight: 600; }
+.a3d-vistas button.on, .a3d-ctl button.on { background: var(--acc); border-color: var(--acc); color: var(--on-acc); }
+.a3d-ctl { display: flex; gap: 4px; margin-top: 4px; align-items: center; }
+.a3d-ctl button { flex: 0 0 auto; min-width: 44px; }
+.a3d-hint { flex: 1; text-align: right; font-size: .75rem; color: var(--mut); }
+.fig-ol { stroke: var(--bg2); fill: none; stroke-linecap: round; }
+.fig-body3 { fill: var(--fig); stroke: var(--fig); }
+.fig-nose { fill: var(--acc); }
+.fig-floor3 { fill: color-mix(in srgb, var(--line) 35%, transparent); }
+.fig-grid { stroke: var(--line); opacity: .55; }
+.fig-shadow { fill: #000; opacity: .28; }
+.fig-boxe { stroke: color-mix(in srgb, var(--prop) 70%, #000); stroke-width: .8; }
+.fig-ptop { fill: color-mix(in srgb, var(--prop) 78%, #fff); opacity: .9; }
+.fig-accp { fill: color-mix(in srgb, var(--acc) 45%, var(--bg2)); stroke: var(--acc); }
