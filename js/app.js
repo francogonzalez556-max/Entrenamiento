@@ -22,6 +22,7 @@ function migrarPerfil() {
   try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* sin almacenamiento */ }
 }
 migrarPerfil();
+if (!S.acceso && S.perfil) { S.acceso = { tipo: 'total', desde: 'existente' }; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* sin almacenamiento */ } }
 const _planes = {};
 const cicloHoy = () => (S.perfil?.inicio ? weekInfo(today()).ciclo : 1);
 // cada ciclo de 12 semanas rota los ejercicios (ciclo 1 = plan base)
@@ -559,6 +560,7 @@ function vWizard(first) {
   const prog = WZ_PASOS.map((n, i) => `<i class="${i <= paso ? 'on' : ''}"></i>`).join('');
   return `${first ? '' : header('Mi perfil y objetivos', '#/mas')}<section class="wrap wz">
     ${first && paso === 0 ? '<div class="hero"><div class="hero-ico">💪</div><h1>Armemos tu plan</h1><p>6 pasos rápidos para crear un plan a tu medida.</p></div>' : ''}
+    ${first && paso === 0 && !esStandalone() && S.acceso?.codigo ? `<div class="card infobanner"><b>📲 Primero instala la app</b><p class="small">iPhone (Safari): Compartir ⬆️ → <i>Agregar a inicio</i>. Android (Chrome): menú ⋮ → <i>Instalar aplicación</i>. Luego ábrela desde el ícono; si te pide código, pega este:</p><p><b class="invcode">${S.acceso.codigo}</b> <button class="link" data-act="invcopiarmio">Copiar</button></p><p class="small muted">${S.acceso.vence ? `Tu acceso es válido hasta el ${fmt(S.acceso.vence)}.` : ''}</p></div>` : ''}
     <div class="wz-prog">${prog}</div><p class="small muted center">Paso ${paso + 1} de ${WZ_PASOS.length} · ${WZ_PASOS[paso]}</p>
     <div class="card form">${body}</div>
     <div class="wz-nav">${paso > 0 ? '<button class="btn" data-act="wzback">‹ Atrás</button>' : '<span></span>'}
@@ -615,6 +617,7 @@ function vHoy() {
     <div class="weekline"><span class="pill">Semana ${wi.antes ? 0 : wi.wk}${wi.ciclo > 1 ? ` · ciclo ${wi.ciclo}` : ''} de 12</span><span class="pill soft">Fase ${wi.phase}: ${FASES[wi.phase - 1].nombre}</span>${wi.deload ? '<span class="pill warn">Semana de descarga</span>' : ''}</div>
     ${enfoqueActivo(p) ? `<a class="card row-link enfoque" href="#/enfoque"><span>🎯</span><div class="grow"><b>Enfoque: ${nombresEnf(enfoqueActivo(p).areas)}</b><span class="small muted">Hasta el ${fmt(enfoqueActivo(p).hasta)} · quedan ${dayDiff(t, enfoqueActivo(p).hasta) + 1} días</span></div>›</a>`
       : p.enfoques && !p.enfoques.avisado ? '<a class="card row-link nuevo" href="#/enfoque"><span>🎯</span><div class="grow"><b>Tu enfoque terminó</b><span class="small muted">Tu plan volvió a la normalidad. ¿Elegir otro?</span></div>›</a>' : ''}
+    ${S.acceso?.tipo === 'invitado' && dayDiff(t, S.acceso.vence) <= 5 ? `<div class="card warnc"><b>🔑 Tu acceso vence ${dayDiff(t, S.acceso.vence) === 0 ? 'hoy' : `en ${dayDiff(t, S.acceso.vence)} días`}</b><p class="small">Exporta un respaldo y pide un link nuevo a quien te invitó para continuar.</p></div>` : ''}
     ${!p.parq ? '<a class="card row-link nuevo" href="#/salud"><span>🩺</span><div class="grow"><b>Completa tu cuestionario de salud</b><span class="small muted">7 preguntas, 1 minuto. Para entrenar seguro.</span></div>›</a>' : ''}
     ${p.precaucion ? '<a class="card row-link" href="#/salud"><span>🩺</span><div class="grow"><b>Modo precaución activo</b><span class="small muted">Consulta a tu médico antes de subir la intensidad.</span></div>›</a>' : ''}
     ${p.revisar ? '<a class="card row-link nuevo" href="#/perfil"><span>✨</span><div class="grow"><b>Nuevo: personaliza tu plan</b><span class="small muted">Objetivo, dónde entrenas, equipo y días. Si no cambias nada, tu plan sigue igual.</span></div>›</a>' : ''}
@@ -1333,6 +1336,87 @@ function vEquipo() {
   </section>`;
 }
 
+/* ---- INVITACIONES CON VENCIMIENTO ----
+   Código: AAAAMMDD-XXXX-FIRMA (00000000 = sin vencimiento). La firma evita que se invente una fecha a mano.
+   Sin servidor es un candado "suave": suficiente para compartir con conocidos. */
+const INV_CLAVE = 'mE-entreno-9f2c71b8';
+const INV_ALF = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+function hash53(str, seed = 0) {
+  let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+}
+function firmaInv(base) {
+  let n = hash53(INV_CLAVE + base, 7), m = hash53(base + INV_CLAVE, 13), out = '';
+  for (let i = 0; i < 8; i++) { const x = i < 4 ? n : m; out += INV_ALF[x % INV_ALF.length]; if (i < 4) n = Math.floor(n / INV_ALF.length); else m = Math.floor(m / INV_ALF.length); }
+  return out;
+}
+function crearCodigoInv(dias) {
+  const vence = dias ? iso(addDays(new Date(), dias - 1)).replace(/-/g, '') : '00000000';
+  let r = '';
+  for (let i = 0; i < 4; i++) r += INV_ALF[Math.floor(Math.random() * INV_ALF.length)];
+  const base = `${vence}-${r}`;
+  return `${base}-${firmaInv(base)}`;
+}
+function leerCodigoInv(txt) {
+  const m = String(txt || '').toUpperCase().match(/(\d{8})-([A-Z0-9]{4})-([A-Z0-9]{8})/);
+  if (!m || firmaInv(`${m[1]}-${m[2]}`) !== m[3]) return null;
+  if (m[1] === '00000000') return { tipo: 'total', codigo: m[0] };
+  return { tipo: 'invitado', vence: `${m[1].slice(0, 4)}-${m[1].slice(4, 6)}-${m[1].slice(6)}`, codigo: m[0] };
+}
+const linkInv = (codigo) => `${location.origin}${location.pathname}?inv=${codigo}`;
+function aplicarInvitacion(inv) {
+  const a = S.acceso;
+  if (a?.tipo === 'total') return 'ya';
+  if (inv.tipo === 'total') S.acceso = { tipo: 'total', codigo: inv.codigo };
+  else S.acceso = { tipo: 'invitado', vence: a?.vence && a.vence > inv.vence ? a.vence : inv.vence, codigo: inv.codigo, visto: a?.visto };
+  save(true);
+  return 'ok';
+}
+function accesoEstado() {
+  const a = S.acceso;
+  if (!a) return 'ninguno';
+  if (a.tipo === 'total') return 'ok';
+  const hoy = a.visto && a.visto > today() ? a.visto : today(); // si se atrasa la fecha del teléfono, se usa la última vista
+  return hoy <= a.vence ? 'ok' : 'vencido';
+}
+const esStandalone = () => window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true;
+function vBloqueo(estado) {
+  return `<section class="wrap bloqueo"><div class="hero"><div class="hero-ico">🔒</div>
+    <h1>${estado === 'vencido' ? 'Tu acceso terminó' : 'Mi Entrenamiento'}</h1>
+    <p>${estado === 'vencido' ? `Tu invitación venció el ${fmt(S.acceso.vence)}. <b>Tus datos siguen guardados</b>: pide un link nuevo a quien te invitó y continúa donde quedaste.` : 'Esta app funciona por invitación. Pide un link a quien te la recomendó.'}</p></div>
+    <div class="card form"><label>Pega aquí tu link o código de invitación<input id="invcod" autocomplete="off" placeholder="ej: 20261231-ABCD-…"></label>
+      <button class="btn primary big" data-act="invactivar">Activar</button></div>
+    <details class="card acc"><summary>¿Ya usabas la app en otro teléfono?</summary><p class="small">Importa tu respaldo (.json) para recuperar tus datos y tu acceso.</p><label class="btn">Importar respaldo<input type="file" accept="application/json,.json" id="fimport" hidden></label></details>
+  </section>`;
+}
+let invDraft = { nombre: '', dias: 30, codigo: null };
+function vCompartir() {
+  if (S.acceso?.tipo !== 'total') return vMas();
+  const d = invDraft, hist = [...(S.invitaciones || [])].reverse().slice(0, 15), t = today();
+  const res = d.codigo ? leerCodigoInv(d.codigo) : null;
+  return `${header('Compartir la app', '#/mas')}<section class="wrap">
+    <div class="card form"><h3>Nueva invitación</h3>
+      <label>Nombre de la persona (opcional, para tu registro)<input data-inv="nombre" value="${esc(d.nombre)}" placeholder="ej: Juan"></label>
+      <label>Días de acceso<input data-inv="dias" type="text" inputmode="numeric" value="${d.dias || ''}" placeholder="ej: 30"></label>
+      <div class="chips2">${[7, 15, 30, 90].map((n) => `<button type="button" class="chip ${d.dias === n ? 'on' : ''}" data-act="invdias" data-v="${n}">${n} días</button>`).join('')}<button type="button" class="chip ${d.dias === 0 ? 'on' : ''}" data-act="invdias" data-v="0">♾️ Sin vencimiento</button></div>
+      <p class="small muted">${d.dias ? `Vencerá el <b>${fmt(iso(addDays(new Date(), d.dias - 1)), true)}</b>.` : 'Sin vencimiento: ideal para familia.'}</p>
+      <button class="btn primary big" data-act="invgen">Generar link</button></div>
+    ${res ? `<div class="card accent-b"><h3>Link listo</h3>
+      <p class="small">${res.tipo === 'total' ? 'Acceso sin vencimiento.' : `Válido hasta el <b>${fmt(res.vence, true)}</b>.`}</p>
+      <div class="invlink">${esc(linkInv(d.codigo))}</div>
+      <p class="small muted">Código: <b>${d.codigo}</b></p>
+      <div class="btns"><button class="btn primary" data-act="invshare">Enviar (WhatsApp, etc.)</button><button class="btn" data-act="invcopiar">Copiar</button></div></div>` : ''}
+    ${hist.length ? `<div class="card"><h3>Invitaciones enviadas</h3><ul class="plist">${hist.map((x) => `<li><span>${fmt(x.fecha)}</span><b>${esc(x.nombre || 'Sin nombre')}</b><span class="small ${x.vence && x.vence < t ? 'muted' : 'good'}">${x.vence ? (x.vence < t ? `venció ${fmt(x.vence)}` : `hasta ${fmt(x.vence)}`) : 'sin vencimiento'}</span></li>`).join('')}</ul></div>` : ''}
+    <p class="small muted">Cada persona tendrá sus propios datos en su teléfono. Una invitación no se puede anular antes de su vencimiento: usa plazos cortos y envía uno nuevo si quieres extenderlo. Es un control simple, pensado para compartir con conocidos.</p>
+  </section>`;
+}
+
 /* ---- Mover sesiones ---- */
 let moverAlcance = 'semana';
 function abrirMover(sid, w) {
@@ -1652,6 +1736,8 @@ function vSeries() {
 function vMas() {
   return `${header('Más')}<section class="wrap">
     <a class="card row-link" href="#/biblioteca"><span>📚</span><div class="grow"><b>Ejercicios</b><span class="small muted">Técnica, animación y videos</span></div>›</a>
+    ${S.acceso?.tipo === 'total' ? '<a class="card row-link" href="#/compartir"><span>📤</span><div class="grow"><b>Compartir la app</b><span class="small muted">Envía un link con los días de acceso que tú elijas</span></div>›</a>'
+      : S.acceso?.vence ? `<div class="card small-card"><p class="small">🔑 Tu acceso es válido hasta el <b>${fmt(S.acceso.vence, true)}</b>.</p></div>` : ''}
     <a class="card row-link" href="#/enfoque"><span>🎯</span><div class="grow"><b>Enfoques</b><span class="small muted">${enfoqueActivo() ? `Activo: ${nombresEnf(enfoqueActivo().areas)}` : 'Prioriza brazos, tren superior, cardio…'}</span></div>›</a>
     <a class="card row-link" href="#/series"><span>📊</span><div class="grow"><b>Calculadora de series</b><span class="small muted">Series directas e indirectas por músculo</span></div>›</a>
     <a class="card row-link" href="#/timer"><span>⏱️</span><div class="grow"><b>Temporizador</b><span class="small muted">Tabata, intervalos, EMOM y AMRAP con voz</span></div>›</a>
@@ -1671,7 +1757,7 @@ function vMas() {
       <p class="small"><b>Android (Chrome):</b> menú ⋮ → <i>Instalar aplicación</i> o <i>Agregar a pantalla principal</i>.<br><b>iPhone (Safari):</b> botón Compartir ⬆️ → <i>Agregar a inicio</i>.<br>Una vez instalada funciona sin internet (los videos sí requieren conexión).</p></div>
     <div class="card small-card"><h3>⚠️ Precauciones</h3><p class="small">Antes de empezar, idealmente hazte un chequeo médico general (presión, ECG si tienes antecedentes). Detén el ejercicio si sientes dolor en el pecho, mareo intenso o falta de aire desproporcionada. Dolor articular punzante = detente y ajusta.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">v1.11 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">v1.12 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 
@@ -1727,6 +1813,14 @@ function route() {
   const main = $('#main');
   const h = location.hash.replace(/^#\/?/, '').split('/');
   let v = h[0] || 'hoy';
+  const acc = accesoEstado();
+  if (acc !== 'ok') {
+    main.innerHTML = vBloqueo(acc);
+    document.body.classList.add('no-nav');
+    document.body.dataset.sec = 'hoy';
+    return;
+  }
+  if (S.acceso.tipo === 'invitado' && (!S.acceso.visto || S.acceso.visto < today())) { S.acceso.visto = today(); save(); }
   if (!S.perfil) v = 'onboarding';
   let html;
   ctx = {};
@@ -1744,6 +1838,7 @@ function route() {
     case 'alimentos': html = vAlimentos(); break;
     case 'equipo': html = vEquipo(); break;
     case 'salud': html = vSalud(); break;
+    case 'compartir': html = vCompartir(); break;
     case 'enfoque': html = vEnfoque(); break;
     case 'series': html = vSeries(); break;
     case 'recordatorios': html = vRecordatorios(); break;
@@ -1768,7 +1863,7 @@ function route() {
   sheet.open = false;
   document.body.classList.remove('sheet-open');
   document.body.classList.toggle('no-nav', v === 'onboarding');
-  const navKey = { sesion: 'hoy', perfil: 'mas', biblioteca: 'mas', ej: 'mas', rutinas: 'mas', rutina: 'mas', alimentos: 'mas', alimento: 'mas', equipo: 'mas', salud: 'mas', recordatorios: 'mas', ajustes: 'mas', timer: 'mas', enfoque: 'mas', series: 'mas' }[v] || v;
+  const navKey = { sesion: 'hoy', perfil: 'mas', biblioteca: 'mas', ej: 'mas', rutinas: 'mas', rutina: 'mas', alimentos: 'mas', alimento: 'mas', equipo: 'mas', salud: 'mas', recordatorios: 'mas', ajustes: 'mas', timer: 'mas', enfoque: 'mas', series: 'mas', compartir: 'mas' }[v] || v;
   document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.v === navKey));
   document.body.dataset.sec = navKey;
   main.querySelectorAll('svg[data-anim]').forEach((s) => stops.push(Fig.mount(s, ANIMS[s.dataset.anim])));
@@ -1992,6 +2087,38 @@ const actions = {
   },
   finishforce(btn, e) { actions.finish(btn, e, true); },
   pw(btn) { planOffset += +btn.dataset.d; rerender(); },
+  invdias(btn) { invDraft.dias = +btn.dataset.v; invDraft.codigo = null; rerender(); },
+  invgen() {
+    const dias = invDraft.dias;
+    if (dias !== 0 && !(dias >= 1 && dias <= 3650)) { toast('Indica una cantidad de días válida'); return; }
+    invDraft.codigo = crearCodigoInv(dias);
+    const r = leerCodigoInv(invDraft.codigo);
+    S.invitaciones = S.invitaciones || [];
+    S.invitaciones.push({ fecha: today(), nombre: invDraft.nombre.trim(), vence: r.vence || null, codigo: invDraft.codigo });
+    save(true); rerender();
+  },
+  async invshare() {
+    const r = leerCodigoInv(invDraft.codigo), url = linkInv(invDraft.codigo);
+    const txt = `Te invito a Mi Entrenamiento 💪 ${r.tipo === 'total' ? '' : `(acceso hasta el ${fmt(r.vence)}) `}Abre este link en Safari (iPhone) o Chrome (Android) e instálala en tu pantalla de inicio:`;
+    try {
+      if (navigator.share) await navigator.share({ title: 'Mi Entrenamiento', text: txt, url });
+      else { await navigator.clipboard.writeText(`${txt} ${url}`); toast('Invitación copiada'); }
+    } catch (e) { /* cancelado */ }
+  },
+  async invcopiar() {
+    try { await navigator.clipboard.writeText(linkInv(invDraft.codigo)); toast('Link copiado'); } catch (e) { toast('No se pudo copiar: mantén presionado el link'); }
+  },
+  async invcopiarmio() {
+    try { await navigator.clipboard.writeText(S.acceso.codigo); toast('Código copiado'); } catch (e) { toast('No se pudo copiar'); }
+  },
+  invactivar() {
+    const inv = leerCodigoInv($('#invcod')?.value);
+    if (!inv) { toast('Código o link no válido'); return; }
+    if (inv.tipo === 'invitado' && inv.vence < today()) { toast(`Esa invitación venció el ${fmt(inv.vence)}`); return; }
+    aplicarInvitacion(inv);
+    toast(inv.tipo === 'total' ? 'Acceso activado ✓' : `Acceso activado hasta el ${fmt(inv.vence)} ✓`);
+    location.hash = '#/hoy'; route();
+  },
   moveropen(btn) { abrirMover(btn.dataset.sid, +btn.dataset.w); },
   moveralc(btn) { moverAlcance = btn.dataset.v; abrirMover(btn.dataset.sid, +btn.dataset.w); },
   moverdia(btn) {
@@ -2357,7 +2484,8 @@ const actions = {
   reset() {
     if (!confirm('Esto borra TODO tu historial y perfil. ¿Seguro? (Exporta un respaldo antes)')) return;
     if (!confirm('Última confirmación: ¿borrar todo?')) return;
-    S = { perfil: null, logs: {}, pesos: [], caminatas: [], comidas: {}, propios: [], rutinas: [], ejPropios: [], reemplazos: [], descargas: {}, medidas: [], ajustes: {} };
+    const acceso = S.acceso;
+    S = { perfil: null, logs: {}, pesos: [], caminatas: [], comidas: {}, propios: [], rutinas: [], ejPropios: [], reemplazos: [], descargas: {}, medidas: [], ajustes: {}, acceso };
     save(true); location.hash = '#/hoy'; route();
   },
 };
@@ -2422,6 +2550,9 @@ function init() {
     } else if (el.id === 'fq') {
       sheet.q = num(el.value) || 1;
       $('#fprev').textContent = prevTxt(sheet.food, sheet.q);
+    } else if (el.dataset.inv) {
+      invDraft[el.dataset.inv] = el.dataset.inv === 'dias' ? (num(el.value) ?? null) : el.value;
+      if (el.dataset.inv === 'dias') invDraft.codigo = null;
     } else if (el.dataset.eq && eqDraft) {
       eqDraft[el.dataset.eq] = el.value;
     } else if (el.dataset.wz && wz) {
@@ -2478,7 +2609,10 @@ function init() {
           const d = JSON.parse(r.result);
           if (!d.perfil || !d.logs) throw new Error('formato');
           if (!confirm('Esto reemplaza tus datos actuales por los del respaldo. ¿Continuar?')) return;
+          const accActual = S.acceso, accResp = d.acceso || (d.perfil ? { tipo: 'total', desde: 'respaldo' } : null);
           S = { perfil: null, logs: {}, pesos: [], caminatas: [], comidas: {}, propios: [], rutinas: [], ejPropios: [], reemplazos: [], descargas: {}, medidas: [], ajustes: {}, ...d };
+          // se conserva el mejor acceso entre el del teléfono y el del respaldo
+          S.acceso = accActual?.tipo === 'total' ? accActual : accResp?.tipo === 'total' ? accResp : (accResp?.vence || '') > (accActual?.vence || '') ? accResp : accActual || accResp;
           save(true); toast('Respaldo importado'); rerender();
         } catch (err) { toast('Archivo no válido'); }
       };
@@ -2530,6 +2664,14 @@ function init() {
   navigator.storage?.persist?.().catch(() => {});
   aplicarAjustes();
   window.matchMedia?.('(prefers-color-scheme: light)').addEventListener?.('change', aplicarAjustes);
+  const qInv = new URLSearchParams(location.search).get('inv');
+  if (qInv) {
+    const inv = leerCodigoInv(qInv);
+    if (!inv) setTimeout(() => toast('Link de invitación no válido'), 300);
+    else if (inv.tipo === 'invitado' && inv.vence < today()) setTimeout(() => toast(`Esa invitación venció el ${fmt(inv.vence)}`), 300);
+    else if (aplicarInvitacion(inv) === 'ok') setTimeout(() => toast(inv.tipo === 'total' ? '¡Bienvenido! Acceso activado' : `¡Bienvenido! Acceso hasta el ${fmt(inv.vence)}`), 300);
+    history.replaceState(null, '', location.pathname + (location.hash || '#/hoy'));
+  }
   route();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     // Si llega una versión nueva mientras la app está abierta, recarga una vez para mostrarla

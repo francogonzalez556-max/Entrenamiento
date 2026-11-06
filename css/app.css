@@ -646,3 +646,8 @@ body { font-size: 1rem; }
 .movida { font-family: inherit; font-size: .7rem; font-weight: 700; color: var(--warn); margin-left: 4px; }
 .fres-i.actual { border-color: var(--acc); opacity: .75; }
 .fres-i:disabled { opacity: .4; }
+
+/* v1.12: invitaciones */
+.invlink { font-size: .8rem; word-break: break-all; background: var(--input); border: 1px solid var(--line); border-radius: 10px; padding: 10px; margin: 6px 0; }
+.invcode { font-family: ui-monospace, Menlo, monospace; font-size: 1rem; letter-spacing: .04em; }
+.bloqueo .hero p { max-width: 420px; margin-left: auto; margin-right: auto; }
