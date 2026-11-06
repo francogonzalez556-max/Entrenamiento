@@ -27,8 +27,13 @@ const cicloHoy = () => (S.perfil?.inicio ? weekInfo(today()).ciclo : 1);
 // cada ciclo de 12 semanas rota los ejercicios (ciclo 1 = plan base)
 function PLAN(ciclo = cicloHoy()) {
   const p = S.perfil || {};
-  const k = JSON.stringify([p.objetivo, p.dias, p.lugar, p.equipo, p.nivel, p.dur, p.limit, ciclo]);
-  if (!_planes[k]) _planes[k] = generarPlan(p, ciclo);
+  const enf = p.inicio ? enfoqueActivo(p) : null;
+  const k = JSON.stringify([p.objetivo, p.dias, p.lugar, p.equipo, p.nivel, p.dur, p.limit, ciclo, enf?.areas || null, !!p.autoVol]);
+  if (!_planes[k]) {
+    let pl = generarPlan(p, ciclo);
+    if (enf || p.autoVol) pl = ajustarVolumen(pl, p, enf?.areas || []);
+    _planes[k] = pl;
+  }
   return _planes[k];
 }
 let saveT;
@@ -182,7 +187,7 @@ function itemsDe(sid, wi, date) {
       if (b.tipo === 'calentamiento') out.push({ k: 'warm', corto: !!b.corto });
       else if (b.tipo === 'ej') {
         const r = b.rx[wi.phase - 1];
-        if (r) out.push({ k: 'ex', id: b.id, sets: Math.max(1, (desc ? Math.max(2, r[0] - 1) : r[0]) - aj.menos), reps: r[1], rest: r[2] });
+        if (r) out.push({ k: 'ex', id: b.id, sets: Math.max(1, (desc ? Math.max(2, r[0] - 1) : r[0]) - aj.menos), reps: r[1], rest: r[2], enf: b.aj });
       } else if (b.tipo === 'cardio') {
         const kind = prec && b.kind === 'intervalos' ? 'z2' : b.kind;
         out.push({ k: 'cardio', key: b.kind, rx: cardioRx(kind, wi.wk, PL.cardio, PL.cardioF) });
@@ -551,6 +556,8 @@ function vHoy() {
   return `${header(p.nombre ? `¡A darle, ${esc(p.nombre.split(' ')[0])}! 🔥` : '¡A darle! 🔥')}
   <section class="wrap">
     <div class="weekline"><span class="pill">Semana ${wi.antes ? 0 : wi.wk}${wi.ciclo > 1 ? ` · ciclo ${wi.ciclo}` : ''} de 12</span><span class="pill soft">Fase ${wi.phase}: ${FASES[wi.phase - 1].nombre}</span>${wi.deload ? '<span class="pill warn">Semana de descarga</span>' : ''}</div>
+    ${enfoqueActivo(p) ? `<a class="card row-link enfoque" href="#/enfoque"><span>🎯</span><div class="grow"><b>Enfoque: ${nombresEnf(enfoqueActivo(p).areas)}</b><span class="small muted">Hasta el ${fmt(enfoqueActivo(p).hasta)} · quedan ${dayDiff(t, enfoqueActivo(p).hasta) + 1} días</span></div>›</a>`
+      : p.enfoques && !p.enfoques.avisado ? '<a class="card row-link nuevo" href="#/enfoque"><span>🎯</span><div class="grow"><b>Tu enfoque terminó</b><span class="small muted">Tu plan volvió a la normalidad. ¿Elegir otro?</span></div>›</a>' : ''}
     ${!p.parq ? '<a class="card row-link nuevo" href="#/salud"><span>🩺</span><div class="grow"><b>Completa tu cuestionario de salud</b><span class="small muted">7 preguntas, 1 minuto. Para entrenar seguro.</span></div>›</a>' : ''}
     ${p.precaucion ? '<a class="card row-link" href="#/salud"><span>🩺</span><div class="grow"><b>Modo precaución activo</b><span class="small muted">Consulta a tu médico antes de subir la intensidad.</span></div>›</a>' : ''}
     ${p.revisar ? '<a class="card row-link nuevo" href="#/perfil"><span>✨</span><div class="grow"><b>Nuevo: personaliza tu plan</b><span class="small muted">Objetivo, dónde entrenas, equipo y días. Si no cambias nada, tu plan sigue igual.</span></div>›</a>' : ''}
@@ -643,7 +650,7 @@ function vSesion(date, sid) {
       }
       html += `<div class="card blk ex ${allOk ? 'done' : ''} ${it.circ ? 'incirc' : ''}" data-exc="${it.id}" data-sets="${it.sets}" data-blk="${it.idx}">
         <div class="blk-h"><div class="thumb" data-act="tech" data-id="${it.id}">${Fig.still(ANIMS[it.id]) || '<div class="noanim">🏋️</div>'}</div>
-          <div class="grow"><h3>${esc(ex.nombre)}</h3><p class="rx">${it.circ ? `${it.sets} rondas × ${it.reps}` : `${it.sets} × ${it.reps}${ex.porLado ? ' por lado' : ''} · descanso ${it.rest} s`}</p>
+          <div class="grow"><h3>${esc(ex.nombre)}</h3><p class="rx">${it.circ ? `${it.sets} rondas × ${it.reps}` : `${it.sets} × ${it.reps}${ex.porLado ? ' por lado' : ''} · descanso ${it.rest} s`}${it.enf ? ` <span class="tag-enf" title="Ajuste de volumen">🎯 ${it.enf === 'nuevo' ? 'extra' : it.enf}</span>` : ''}</p>
           <div class="exlinks"><button class="link" data-act="tech" data-id="${it.id}">▶ Ver técnica</button><button class="link" data-act="subopen" data-id="${it.id}" data-orig="${it.orig || it.id}">↔ Cambiar</button></div>
           ${it.orig ? `<p class="small muted">En lugar de ${esc(getEj(it.orig).nombre)} · <button class="link small" data-act="subundo" data-orig="${it.orig}">volver al original</button></p>` : ''}</div></div>
         <div class="tech" id="tech-${it.id}"></div>
@@ -690,6 +697,8 @@ function vPlan() {
     ${wi.deload ? '<div class="hint warn">Semana de descarga: 1 serie menos por ejercicio y pesos cómodos. Recupera para volver más fuerte.</div>' : ''}
     <div class="card pweek">${dias}</div>
     <h2 class="sec">Las 3 fases</h2>${fases}
+    <a class="card row-link" href="#/enfoque"><span>🎯</span><div class="grow"><b>${enfoqueActivo() ? `Enfoque: ${nombresEnf(enfoqueActivo().areas)}` : 'Elegir un enfoque'}</b><span class="small muted">${enfoqueActivo() ? `Hasta el ${fmt(enfoqueActivo().hasta)}` : 'Prioriza zonas por unas semanas'}</span></div>›</a>
+    <a class="card row-link" href="#/series"><span>📊</span><div class="grow"><b>Calculadora de series</b><span class="small muted">Volumen semanal por músculo</span></div>›</a>
     <a class="card row-link" href="#/equipo"><span>🧰</span><div class="grow"><b>¿Tienes equipo nuevo?</b><span class="small muted">Agrégalo y actualiza tu plan</span></div>›</a>
     <a class="card row-link" href="#/rutinas"><span>🧩</span><div class="grow"><b>Rutinas personalizadas</b><span class="small muted">Crea las tuyas y hazlas cualquier día</span></div>›</a>
     <div class="card small-card"><h3>Cómo progresar</h3><p class="small">Usa <b>doble progresión</b>: cuando completes todas las series en el máximo del rango (ej. 3×15), sube el peso en la próxima sesión y vuelve al mínimo del rango. La app te avisa con ⬆️. En el cardio, los minutos suben automáticamente cada semana.</p></div>
@@ -807,7 +816,7 @@ function volumenHTML(L, week) {
   const grupos = ['Piernas', 'Glúteos e isquios', 'Pecho', 'Espalda', 'Hombros', 'Brazos', 'Core'];
   const meta = S.perfil?.objetivo === 'musculo' ? [10, 20] : [6, 12];
   const max = Math.max(meta[1], ...Object.values(g));
-  return `<div class="card"><h3>💪 Series por grupo muscular</h3><p class="small muted">Esta semana. Recomendado para tu objetivo: ${meta[0]}–${meta[1]} series por grupo.</p>
+  return `<div class="card"><h3>💪 Series por grupo muscular</h3><p class="small muted">Esta semana. Recomendado para tu objetivo: ${meta[0]}–${meta[1]} series por grupo. <a href="#/series">Ver calculadora detallada ›</a></p>
     ${grupos.map((x) => { const n = g[x] || 0; return `<div class="vrow"><span>${x}</span><div class="vbar"><i class="${n >= meta[0] ? 'ok' : ''}" style="width:${(n / max) * 100}%"></i><em style="left:${(meta[0] / max) * 100}%"></em></div><b>${n}</b></div>`; }).join('')}</div>`;
 }
 const MEDIDAS = [['cadera', 'Cadera'], ['pecho', 'Pecho'], ['brazo', 'Brazo'], ['muslo', 'Muslo'], ['grasa', '% grasa']];
@@ -1493,10 +1502,81 @@ async function cargarFotos() {
   } catch (e) { box.innerHTML = '<p class="small muted">No se pudieron cargar las fotos en este navegador.</p>'; }
 }
 
+/* ---- ENFOQUES ---- */
+let enfDraft = null;
+const nombresEnf = (areas) => areas.map((a) => ENFOQUES.find((x) => x[0] === a)?.[2] || a).join(', ');
+function cambiosAjuste(pl) {
+  return pl.orden.flatMap((sid) => pl.ses[sid].bloques.filter((b) => b.aj).map((b) =>
+    `<div class="diff"><b>${esc(pl.ses[sid].nombre)}</b><span class="entra">${b.aj === 'nuevo' ? '+ ' : ''}${esc(EJERCICIOS[b.id]?.nombre || b.id)}${b.aj === 'nuevo' ? '' : ` · ${b.aj}`}</span></div>`));
+}
+function vEnfoque() {
+  const p = S.perfil, activo = enfoqueActivo(p);
+  if (p.enfoques && !activo && !p.enfoques.avisado) { p.enfoques.avisado = true; save(true); }
+  if (!enfDraft) enfDraft = { areas: activo ? [...activo.areas] : [], semanas: p.enfoques?.semanas || 6 };
+  const d = enfDraft;
+  const prev = d.areas.length ? ajustarVolumen(generarPlan(p, cicloHoy()), p, d.areas) : null;
+  const camb = prev ? cambiosAjuste(prev) : [];
+  const chip = (v, ico, l) => `<button type="button" class="chip ${d.areas.includes(v) ? 'on' : ''}" data-act="enfset" data-v="${v}">${ico} ${l}</button>`;
+  return `${header('Enfoque de entrenamiento', '#/mas')}<section class="wrap">
+    ${activo ? `<div class="card accent"><div class="tag">Enfoque activo</div><h3>${nombresEnf(activo.areas)}</h3><p class="small">Desde el ${fmt(activo.desde)} hasta el ${fmt(activo.hasta)} · quedan ${dayDiff(today(), activo.hasta) + 1} días</p></div>` : ''}
+    <div class="card"><h3>¿Qué quieres priorizar?</h3><p class="small muted">Elige una o varias zonas. El plan sumará series y, si cabe en tu tiempo de sesión, ejercicios extra para ellas.</p>
+      <div class="chips">${ENFOQUES.map(([v, i, l]) => chip(v, i, l)).join('')}</div>
+      ${d.areas.length > 3 ? '<div class="infobanner mt">Enfocar muchas zonas a la vez diluye el efecto y alarga las sesiones. Lo ideal son 1 a 3.</div>' : ''}</div>
+    <div class="card"><h3>¿Por cuánto tiempo?</h3><div class="chips2">${[4, 6, 8, 12].map((n) => `<button type="button" class="chip ${d.semanas === n ? 'on' : ''}" data-act="enfdur" data-v="${n}">${n} semanas</button>`).join('')}</div>
+      <p class="small muted">Al terminar, tu plan vuelve a la normalidad automáticamente.</p></div>
+    ${prev ? `<div class="card accent-b"><h3>Así cambiaría tu plan</h3>${camb.length ? camb.join('') : '<p class="small muted">Tus sesiones ya tienen suficiente volumen para estas zonas o no hay espacio en tu tiempo de sesión.</p>'}
+      ${d.areas.includes('cardio') ? `<div class="diff"><b>Cardio</b><span class="entra">+30% de minutos</span></div>` : ''}</div>` : ''}
+    <button class="btn primary big" data-act="enfsave" ${d.areas.length ? '' : 'disabled'}>${activo ? 'Actualizar enfoque' : 'Activar enfoque'}</button>
+    ${activo ? '<button class="btn danger ghost" data-act="enfquitar">Quitar enfoque</button>' : ''}
+    <a class="card row-link mt" href="#/series"><span>📊</span><div class="grow"><b>Calculadora de series</b><span class="small muted">Mira el volumen de cada músculo</span></div>›</a>
+  </section>`;
+}
+
+/* ---- CALCULADORA DE SERIES ---- */
+let serModo = 'plan';
+function vSeries() {
+  const p = S.perfil, t = today(), wi = weekInfo(t);
+  const enf = enfoqueActivo(p), fs = sgEnfocados(enf?.areas);
+  const fase = wi.phase - 1;
+  const v = serModo === 'plan' ? volumenPlan(PLAN(), fase) : volumenHecho(S.logs, wi.antes ? 1 : wi.week);
+  const resumen = { bajo: 0, ok: 0, alto: 0 };
+  const fila = ([k, n]) => {
+    const x = v[k], ef = efectivas(x), r = rangoSeries(p, k, fs);
+    const est = ef < r.min ? 'bajo' : ef > r.max ? 'alto' : 'ok';
+    resumen[est]++;
+    const top = Math.max(r.max * 1.5, ef, 1);
+    const notas = r.notas.filter((n) => n !== 'enfoque');
+    return `<div class="sg ${est}"><div class="sg-h"><b>${n}${fs.has(k) ? ' 🎯' : ''}</b><span class="sg-st">${est === 'ok' ? 'Óptimo' : est === 'bajo' ? 'Bajo' : 'Alto'}</span></div>
+      <div class="sg-bar"><span class="sg-band" style="left:${(r.min / top) * 100}%;width:${((r.max - r.min) / top) * 100}%"></span><i style="width:${Math.min(100, (ef / top) * 100)}%"></i></div>
+      <div class="small muted">Directas <b>${fmtN(x.d)}</b> · Indirectas <b>${fmtN(x.i)}</b> · Efectivas <b>${fmtN(ef)}</b> · Rango <b>${r.min}–${r.max}</b>${notas.length ? ` <span class="sg-nota">(ajustado por ${notas.join(', ')})</span>` : ''}</div></div>`;
+  };
+  const sec = (tren, titulo) => `<div class="card"><h3>${titulo}</h3>${SUBGRUPOS.filter((x) => x[2] === tren).map(fila).join('')}</div>`;
+  const cuerpo = sec('sup', '💪 Tren superior') + sec('inf', '🦵 Tren inferior') + sec('core', '🎯 Core');
+  const obj = PERFIL_OPC.objetivos.find((o) => o[0] === p.objetivo)?.[2] || p.objetivo;
+  const niv = PERFIL_OPC.niveles.find((o) => o[0] === p.nivel)?.[1] || p.nivel;
+  const auto = ajustarVolumen(generarPlan(p, cicloHoy()), { ...p, autoVol: true }, enf?.areas || []);
+  const cambAuto = cambiosAjuste(auto);
+  return `${header('Calculadora de series', '#/mas')}<section class="wrap">
+    <div class="seg"><button class="${serModo === 'plan' ? 'on' : ''}" data-act="sermodo" data-v="plan">Plan de la semana</button><button class="${serModo === 'hecho' ? 'on' : ''}" data-act="sermodo" data-v="hecho">Hecho esta semana</button></div>
+    <div class="stats mt"><div><b class="good">${resumen.ok}</b><span>óptimos</span></div><div><b style="color:var(--warn)">${resumen.bajo}</b><span>bajos</span></div><div><b style="color:var(--bad)">${resumen.alto}</b><span>altos</span></div></div>
+    <div class="card small-card"><p class="small"><b>Directas:</b> el músculo es el motor principal del ejercicio (ej. pectoral en el press de banca). <b>Indirectas:</b> ayuda como secundario (ej. tríceps en el press) y cuenta la mitad. <b>Efectivas</b> = directas + ½ indirectas, por semana.</p>
+      <p class="small muted">Tu rango considera: objetivo <b>${esc(obj)}</b>, nivel <b>${esc(niv)}</b>${p.edad >= 60 || p.edad < 16 ? ', edad' : ''}${(p.limit || []).length ? `, molestias (${p.limit.join(', ')})` : ''}${enf ? `, enfoque en ${nombresEnf(enf.areas)}` : ''}. ${serModo === 'plan' ? `Semana tipo de la fase ${wi.phase}.` : 'Solo series marcadas como hechas.'}</p></div>
+    ${cuerpo}
+    <div class="card ${p.autoVol ? 'accent-b' : ''}"><h3>⚙️ Ajuste automático del plan</h3>
+      <p class="small">${p.autoVol ? 'Activado: tu plan suma series o ejercicios donde estás bajo y quita donde sobra, respetando tu tiempo de sesión, tu equipo y tus molestias.' : 'Si lo activas, la app adecuará tu plan a estos rangos, respetando tu tiempo de sesión, tu equipo y tus molestias.'}</p>
+      ${!p.autoVol ? (cambAuto.length ? `<p class="small muted">Cambios que haría:</p>${cambAuto.join('')}` : '<p class="small muted">Tu plan ya está dentro de los rangos: no haría cambios.</p>') : ''}
+      <button class="btn ${p.autoVol ? '' : 'primary'} big" data-act="autovol">${p.autoVol ? 'Desactivar ajuste automático' : 'Activar ajuste automático'}</button></div>
+    <a class="card row-link" href="#/enfoque"><span>🎯</span><div class="grow"><b>Enfoques</b><span class="small muted">Prioriza una zona por unas semanas</span></div>›</a>
+    <p class="small muted center">Rangos orientativos basados en la evidencia de volumen semanal por grupo muscular. No reemplazan a un profesional.</p>
+  </section>`;
+}
+
 /* ---- MÁS ---- */
 function vMas() {
   return `${header('Más')}<section class="wrap">
     <a class="card row-link" href="#/biblioteca"><span>📚</span><div class="grow"><b>Ejercicios</b><span class="small muted">Técnica, animación y videos</span></div>›</a>
+    <a class="card row-link" href="#/enfoque"><span>🎯</span><div class="grow"><b>Enfoques</b><span class="small muted">${enfoqueActivo() ? `Activo: ${nombresEnf(enfoqueActivo().areas)}` : 'Prioriza brazos, tren superior, cardio…'}</span></div>›</a>
+    <a class="card row-link" href="#/series"><span>📊</span><div class="grow"><b>Calculadora de series</b><span class="small muted">Series directas e indirectas por músculo</span></div>›</a>
     <a class="card row-link" href="#/timer"><span>⏱️</span><div class="grow"><b>Temporizador</b><span class="small muted">Tabata, intervalos, EMOM y AMRAP con voz</span></div>›</a>
     <a class="card row-link" href="#/recordatorios"><span>⏰</span><div class="grow"><b>Recordatorios</b><span class="small muted">Agrega tus entrenamientos al calendario</span></div>›</a>
     <a class="card row-link" href="#/salud"><span>🩺</span><div class="grow"><b>Cuestionario de salud</b><span class="small muted">PAR-Q+ · ${S.perfil?.parq ? 'completado' : 'pendiente'}</span></div>›</a>
@@ -1514,7 +1594,7 @@ function vMas() {
       <p class="small"><b>Android (Chrome):</b> menú ⋮ → <i>Instalar aplicación</i> o <i>Agregar a pantalla principal</i>.<br><b>iPhone (Safari):</b> botón Compartir ⬆️ → <i>Agregar a inicio</i>.<br>Una vez instalada funciona sin internet (los videos sí requieren conexión).</p></div>
     <div class="card small-card"><h3>⚠️ Precauciones</h3><p class="small">Antes de empezar, idealmente hazte un chequeo médico general (presión, ECG si tienes antecedentes). Detén el ejercicio si sientes dolor en el pecho, mareo intenso o falta de aire desproporcionada. Dolor articular punzante = detente y ajusta.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">v1.8 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">v1.9 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 
@@ -1587,6 +1667,8 @@ function route() {
     case 'alimentos': html = vAlimentos(); break;
     case 'equipo': html = vEquipo(); break;
     case 'salud': html = vSalud(); break;
+    case 'enfoque': html = vEnfoque(); break;
+    case 'series': html = vSeries(); break;
     case 'recordatorios': html = vRecordatorios(); break;
     case 'ajustes': html = vAjustes(); break;
     case 'timer':
@@ -1602,13 +1684,14 @@ function route() {
   if (v !== 'perfil' && v !== 'onboarding') wz = null;
   if (v !== 'equipo') eqDraft = null;
   if (v !== 'salud') saludDraft = null;
+  if (v !== 'enfoque') enfDraft = null;
   if (v !== 'timer' && tmRun.activo) tmParar();
   if (crono.row) cronoStop(true);
   if (v === 'progreso') cargarFotos();
   sheet.open = false;
   document.body.classList.remove('sheet-open');
   document.body.classList.toggle('no-nav', v === 'onboarding');
-  const navKey = { sesion: 'hoy', perfil: 'mas', biblioteca: 'mas', ej: 'mas', rutinas: 'mas', rutina: 'mas', alimentos: 'mas', alimento: 'mas', equipo: 'mas', salud: 'mas', recordatorios: 'mas', ajustes: 'mas', timer: 'mas' }[v] || v;
+  const navKey = { sesion: 'hoy', perfil: 'mas', biblioteca: 'mas', ej: 'mas', rutinas: 'mas', rutina: 'mas', alimentos: 'mas', alimento: 'mas', equipo: 'mas', salud: 'mas', recordatorios: 'mas', ajustes: 'mas', timer: 'mas', enfoque: 'mas', series: 'mas' }[v] || v;
   document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.v === navKey));
   document.body.dataset.sec = navKey;
   main.querySelectorAll('svg[data-anim]').forEach((s) => stops.push(Fig.mount(s, ANIMS[s.dataset.anim])));
@@ -1911,6 +1994,34 @@ const actions = {
     const prev = diaComidas(ayer).filter((x) => x.m === m);
     S.comidas[comidaDia] = [...diaComidas(comidaDia), ...prev.map((x, i) => ({ ...x, id: Date.now() + '' + i }))];
     save(true); toast('Comida copiada de ayer'); rerender();
+  },
+  enfset(btn) {
+    const v = btn.dataset.v;
+    enfDraft.areas = enfDraft.areas.includes(v) ? enfDraft.areas.filter((x) => x !== v) : [...enfDraft.areas, v];
+    rerender();
+  },
+  enfdur(btn) { enfDraft.semanas = +btn.dataset.v; rerender(); },
+  enfsave() {
+    const d = enfDraft, act = enfoqueActivo();
+    const desde = act ? act.desde : today();
+    S.perfil.enfoques = { areas: d.areas, semanas: d.semanas, desde, hasta: iso(addDays(parse(desde), d.semanas * 7 - 1)) };
+    enfDraft = null;
+    save(true);
+    toast(`🎯 Enfoque activado por ${d.semanas} semanas`);
+    location.hash = '#/plan';
+  },
+  enfquitar() {
+    if (!confirm('¿Quitar el enfoque? Tu plan vuelve a la normalidad.')) return;
+    delete S.perfil.enfoques;
+    enfDraft = null;
+    save(true); toast('Enfoque quitado'); rerender();
+  },
+  sermodo(btn) { serModo = btn.dataset.v; rerender(); },
+  autovol() {
+    S.perfil.autoVol = !S.perfil.autoVol;
+    save(true);
+    toast(S.perfil.autoVol ? 'Ajuste automático activado ✓' : 'Ajuste automático desactivado');
+    rerender();
   },
   subopen(btn) {
     const orig = btn.dataset.orig, actual = btn.dataset.id;

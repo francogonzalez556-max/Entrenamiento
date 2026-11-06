@@ -619,3 +619,21 @@ body { font-size: 1rem; }
 .set.corriendo .crono, .set.previa .crono { background: var(--acc); color: var(--on-acc); animation: pulso 1s infinite; }
 .set.meta input[data-f="r"] { color: var(--good); }
 @keyframes pulso { 50% { transform: scale(1.08); } }
+
+/* v1.9: enfoques y calculadora de series */
+.tag-enf { display: inline-block; font-size: .7rem; font-family: inherit; letter-spacing: 0; text-transform: none; padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, var(--acc) 20%, transparent); color: var(--acc2); margin-left: 4px; vertical-align: 1px; }
+.row-link.enfoque { border-color: var(--acc); }
+.sg { padding: 9px 0; border-bottom: 1px solid var(--line); }
+.sg:last-child { border-bottom: 0; }
+.sg-h { display: flex; justify-content: space-between; align-items: center; font-size: .92rem; }
+.sg-st { font-size: .72rem; font-weight: 800; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; letter-spacing: .04em; }
+.sg.ok .sg-st { background: color-mix(in srgb, var(--good) 22%, transparent); color: var(--good); }
+.sg.bajo .sg-st { background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--warn); }
+.sg.alto .sg-st { background: color-mix(in srgb, var(--bad) 22%, transparent); color: var(--bad); }
+.sg-bar { position: relative; height: 10px; border-radius: 5px; background: var(--chipbg2); margin: 6px 0 4px; overflow: hidden; }
+.sg-band { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--good) 28%, transparent); }
+.sg-bar i { position: relative; display: block; height: 100%; border-radius: 5px; background: var(--acc); }
+.sg.ok .sg-bar i { background: var(--good); }
+.sg.bajo .sg-bar i { background: var(--warn); }
+.sg.alto .sg-bar i { background: var(--bad); }
+.sg-nota { color: var(--acc2); }
