@@ -595,3 +595,27 @@ body { font-size: 1rem; }
 .tm-disp[data-tipo="rest"] .tm-bar i { background: #0a0a0b; }
 .tm-btns { display: grid; grid-template-columns: 1fr 70px; gap: 10px; margin-bottom: 12px; }
 .tm-btns .btn { margin-top: 0; }
+
+/* v1.8: progreso de la sesión y cronómetro */
+.top.ses-top { flex-wrap: wrap; row-gap: 6px; }
+.sesprog { flex-basis: 100%; }
+.sp-l { font-size: .8rem; color: var(--mut); }
+.sp-l b { color: var(--tx); font-family: var(--display); font-weight: 400; font-size: 1.05rem; letter-spacing: .04em; }
+.sp-bar { height: 5px; border-radius: 3px; background: var(--chipbg2); overflow: hidden; margin: 4px 0 6px; }
+.sp-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--good), var(--volt2)); transition: width .3s; }
+.sp-chips { display: flex; gap: 5px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.sp-chips::-webkit-scrollbar { display: none; }
+.sp-c { flex: 0 0 auto; width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--btnline); background: var(--chipbg); color: var(--mut); font: inherit; font-size: .78rem; font-weight: 800; cursor: pointer; padding: 0; }
+.sp-c.ok { background: var(--good); border-color: var(--good); color: #0a0a0b; }
+.sp-c.parcial { border-color: var(--warn); color: var(--warn); background: color-mix(in srgb, var(--warn) 15%, var(--chipbg)); }
+.sp-sig { font-size: .82rem; color: var(--mut); margin-top: 4px; }
+.sp-sig .link { padding: 0; font-size: .82rem; }
+.blk.flash { animation: flash 1.2s ease-out; }
+@keyframes flash { 0% { box-shadow: 0 0 0 3px var(--acc); } 100% { box-shadow: 0 0 0 0 transparent; } }
+.crono { flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--acc); background: transparent; color: var(--acc); font-size: 1.05rem; font-weight: 800; cursor: pointer; padding: 0; }
+.set.previa input[data-f="r"] { color: var(--warn); }
+.set.corriendo { background: color-mix(in srgb, var(--acc) 16%, var(--input)); border-color: var(--acc); }
+.set.corriendo input[data-f="r"] { color: var(--acc); font-size: 1.35rem; }
+.set.corriendo .crono, .set.previa .crono { background: var(--acc); color: var(--on-acc); animation: pulso 1s infinite; }
+.set.meta input[data-f="r"] { color: var(--good); }
+@keyframes pulso { 50% { transform: scale(1.08); } }

@@ -585,24 +585,26 @@ function vSesion(date, sid) {
   const fz = fcZonas();
   const aj = getRutina(sid) ? { msgs: [], factor: 1 } : ajusteSesion(date, sid);
   const desc = wi.deload || !!(S.descargas || {})[wi.week];
-  let html = `${header(ses.nombre, '#/hoy')}<section class="wrap ses">
+  ctx.items = items;
+  let html = `<header class="top ses-top"><a href="#/hoy" class="back" aria-label="Volver">‹</a><h1>${esc(ses.nombre)}</h1><div class="sesprog" id="sesprog">${progresoHTML()}</div></header><section class="wrap ses">
     <p class="muted center">${fmt(date, true)} · Semana ${wi.wk} · Fase ${wi.phase}${wi.ciclo > 1 ? ` · Ciclo ${wi.ciclo}` : ''}${desc ? ' · <b>descarga</b> (1 serie menos, pesos cómodos)' : ''}</p>
     ${aj.msgs.map((m) => `<div class="hint ajuste">🧠 ${m}</div>`).join('')}
     ${aj.sugDescarga ? `<div class="hint warn">Llevas 2 semanas muy exigentes. Una semana de descarga ayuda a recuperar y seguir progresando. <button class="link" data-act="descarga" data-w="${wi.week}">Activar descarga esta semana</button></div>` : ''}
     ${S.perfil?.precaucion ? '<div class="hint warn">🩺 Modo precaución (cuestionario de salud): los intervalos intensos se cambian por cardio suave. Consulta a tu médico.</div>' : ''}
-    <div class="hint">Toca <b>✓</b> al terminar cada serie: se guarda y parte el descanso. Si dejas el peso/reps vacíos se usan los sugeridos.</div>`;
+    <div class="hint">Toca <b>✓</b> al terminar cada serie: se guarda y parte el descanso. Si dejas el peso/reps vacíos se usan los sugeridos. En los ejercicios de tiempo usa <b>⏱</b> para cronometrar cuánto resistes.</div>`;
 
+  items.forEach((it, idx) => { it.idx = idx; });
   for (const it of items) {
     if (it.k === 'warm') {
       const list = CALENTAMIENTO[it.corto ? 'corto' : 'normal'].map((x) => x.replace('cardio', PLAN().cardio.label.toLowerCase()));
-      html += `<div class="card blk ${lg?.warm ? 'done' : ''}" id="warm"><div class="blk-h"><h3>🔥 Calentamiento</h3><button class="chk ${lg?.warm ? 'on' : ''}" data-act="warm" aria-label="Marcar calentamiento">✓</button></div><ul class="ticks">${list.map((x) => `<li>${x}</li>`).join('')}</ul></div>`;
+      html += `<div class="card blk ${lg?.warm ? 'done' : ''}" id="warm" data-blk="${it.idx}"><div class="blk-h"><h3>🔥 Calentamiento</h3><button class="chk ${lg?.warm ? 'on' : ''}" data-act="warm" aria-label="Marcar calentamiento">✓</button></div><ul class="ticks">${list.map((x) => `<li>${x}</li>`).join('')}</ul></div>`;
     } else if (it.k === 'circ') {
       html += `<div class="card circ"><h3>⚡ Circuito · ${it.rondas} rondas</h3><p>Haz los ejercicios <b>seguidos</b>: ${it.trabajo} de trabajo y ${it.pausa} s de pausa entre ejercicios. Descansa <b>${it.entre} s</b> al terminar cada ronda. Anota el peso y las reps (o segundos) que lograste en cada ronda.</p>
         <a class="btn small-btn" href="#/timer/c/${rango(it.trabajo)[0]}/${it.pausa}/${it.rondas * it.nEj}">⏱ Abrir temporizador del circuito</a></div>`;
     } else if (it.k === 'cardio') {
       const c = lg?.cardio?.[it.key] || {};
       const zona = it.rx.zona === 'int' ? `Suave: ${fz.z2[0]}–${fz.z2[1]} lpm · Fuerte: ${fz.fuerte[0]}–${fz.fuerte[1]} lpm` : `Zona 2: ${fz.z2[0]}–${fz.z2[1]} lpm`;
-      html += `<div class="card blk cardio ${c.ok ? 'done' : ''}" data-ck="${it.key}">
+      html += `<div class="card blk cardio ${c.ok ? 'done' : ''}" data-ck="${it.key}" data-blk="${it.idx}">
         <div class="blk-h"><div class="thumb" data-act="tech" data-id="${PLAN().cardio.ex}">${Fig.still(ANIMS[PLAN().cardio.anim], 0)}</div><div class="grow"><h3>${it.rx.titulo}</h3><p class="small">${it.rx.detalle}</p><p class="small zona">${zona}</p></div>
         <button class="chk ${c.ok ? 'on' : ''}" data-act="cardiook" data-key="${it.key}" aria-label="Marcar cardio">✓</button></div>
         <div class="tech" id="tech-eliptica-${it.key}"></div>
@@ -635,10 +637,11 @@ function vSesion(date, sid) {
           <span class="sn">${i + 1}</span>
           ${usaPeso(ex) ? `<input type="text" inputmode="decimal" data-f="w" value="${s.w ?? ''}" placeholder="${sug.w ?? '–'}" aria-label="kg serie ${i + 1}"><span class="u">kg</span>` : ''}
           <input type="number" inputmode="numeric" data-f="r" value="${s.r ?? ''}" placeholder="${hi || ''}" aria-label="${esTiempo(ex) ? 'segundos' : 'reps'} serie ${i + 1}"><span class="u">${esTiempo(ex) ? 's' : 'reps'}</span>
+          ${esTiempo(ex) ? `<button class="crono" data-act="crono" data-meta="${hi || 0}" aria-label="Cronómetro serie ${i + 1}">⏱</button>` : ''}
           <button class="chk ${s.ok ? 'on' : ''}" data-act="setok" aria-label="Serie ${i + 1} lista">✓</button>
         </div>`;
       }
-      html += `<div class="card blk ex ${allOk ? 'done' : ''} ${it.circ ? 'incirc' : ''}" data-exc="${it.id}" data-sets="${it.sets}">
+      html += `<div class="card blk ex ${allOk ? 'done' : ''} ${it.circ ? 'incirc' : ''}" data-exc="${it.id}" data-sets="${it.sets}" data-blk="${it.idx}">
         <div class="blk-h"><div class="thumb" data-act="tech" data-id="${it.id}">${Fig.still(ANIMS[it.id]) || '<div class="noanim">🏋️</div>'}</div>
           <div class="grow"><h3>${esc(ex.nombre)}</h3><p class="rx">${it.circ ? `${it.sets} rondas × ${it.reps}` : `${it.sets} × ${it.reps}${ex.porLado ? ' por lado' : ''} · descanso ${it.rest} s`}</p>
           <div class="exlinks"><button class="link" data-act="tech" data-id="${it.id}">▶ Ver técnica</button><button class="link" data-act="subopen" data-id="${it.id}" data-orig="${it.orig || it.id}">↔ Cambiar</button></div>
@@ -1511,7 +1514,7 @@ function vMas() {
       <p class="small"><b>Android (Chrome):</b> menú ⋮ → <i>Instalar aplicación</i> o <i>Agregar a pantalla principal</i>.<br><b>iPhone (Safari):</b> botón Compartir ⬆️ → <i>Agregar a inicio</i>.<br>Una vez instalada funciona sin internet (los videos sí requieren conexión).</p></div>
     <div class="card small-card"><h3>⚠️ Precauciones</h3><p class="small">Antes de empezar, idealmente hazte un chequeo médico general (presión, ECG si tienes antecedentes). Detén el ejercicio si sientes dolor en el pecho, mareo intenso o falta de aire desproporcionada. Dolor articular punzante = detente y ajusta.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">v1.7 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">v1.8 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 
@@ -1600,6 +1603,7 @@ function route() {
   if (v !== 'equipo') eqDraft = null;
   if (v !== 'salud') saludDraft = null;
   if (v !== 'timer' && tmRun.activo) tmParar();
+  if (crono.row) cronoStop(true);
   if (v === 'progreso') cargarFotos();
   sheet.open = false;
   document.body.classList.remove('sheet-open');
@@ -1621,17 +1625,123 @@ function setData(el) {
   while (lg.ex[id].sets.length <= i) lg.ex[id].sets.push({ w: '', r: '', ok: false });
   return { row, id, i, s: lg.ex[id].sets[i], lg };
 }
+/* ---- Progreso de la sesión ---- */
+function estadoItems() {
+  const lg = getLog(ctx.date, ctx.sid);
+  return (ctx.items || []).filter((it) => it.k !== 'circ').map((it) => {
+    let estado = 'pend', hechas = 0, total = 0, nombre;
+    if (it.k === 'warm') { nombre = 'Calentamiento'; if (lg?.warm) estado = 'ok'; }
+    else if (it.k === 'cardio') { nombre = it.rx.titulo.split(' · ')[0]; if (lg?.cardio?.[it.key]?.ok) estado = 'ok'; }
+    else {
+      nombre = getEj(it.id).nombre;
+      const sets = (lg?.ex?.[it.id]?.sets || []).slice(0, it.sets);
+      total = it.sets; hechas = sets.filter((x) => x.ok).length;
+      estado = hechas >= total ? 'ok' : hechas > 0 ? 'parcial' : 'pend';
+    }
+    return { idx: it.idx, k: it.k, nombre, estado, hechas, total };
+  });
+}
+function progresoHTML() {
+  const st = estadoItems();
+  if (!st.length) return '';
+  const ex = st.filter((x) => x.k === 'ex');
+  const listos = st.filter((x) => x.estado === 'ok').length;
+  const series = ex.reduce((a, x) => a + x.hechas, 0), totalS = ex.reduce((a, x) => a + x.total, 0);
+  const sig = st.find((x) => x.estado !== 'ok');
+  return `<div class="sp-l"><b>${listos} de ${st.length}</b> listos · ${series}/${totalS} series</div>
+    <div class="sp-bar"><i style="width:${(listos / st.length) * 100}%"></i></div>
+    <div class="sp-chips">${st.map((x, n) => `<button class="sp-c ${x.estado}" data-act="irblk" data-i="${x.idx}" aria-label="${esc(x.nombre)}: ${x.estado === 'ok' ? 'listo' : x.estado === 'parcial' ? `${x.hechas} de ${x.total} series` : 'pendiente'}">${x.estado === 'ok' ? '✓' : n + 1}</button>`).join('')}</div>
+    <div class="sp-sig">${sig ? `${sig.estado === 'parcial' ? '⚠️ A medias' : 'Siguiente'}: <button class="link" data-act="irblk" data-i="${sig.idx}">${esc(sig.nombre)}${sig.estado === 'parcial' ? ` (${sig.hechas}/${sig.total})` : ''}</button>` : '🎉 ¡Todo listo! Cierra la sesión abajo.'}</div>`;
+}
+function refreshProg() {
+  const el = $('#sesprog');
+  if (el) el.innerHTML = progresoHTML();
+}
+function irABloque(i) {
+  const el = document.querySelector(`[data-blk="${i}"]`);
+  if (!el) return;
+  const off = ($('.ses-top')?.offsetHeight || 0) + 8;
+  window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - off, behavior: 'smooth' });
+  el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+}
+
+/* ---- Cronómetro para ejercicios de tiempo (cuenta hacia arriba) ---- */
+const crono = { row: null, btn: null, t0: 0, iv: null, meta: 0, aviso: false, cuenta: 0 };
+function cronoStop(guardar) {
+  clearInterval(crono.iv);
+  const { row, btn } = crono;
+  crono.iv = null; crono.row = null; crono.btn = null;
+  if (!row) return null;
+  row.classList.remove('corriendo', 'previa');
+  if (btn) btn.textContent = '⏱';
+  if (!guardar || !crono.t0) return null;
+  const seg = Math.max(1, Math.round((Date.now() - crono.t0) / 1000));
+  const inp = row.querySelector('[data-f="r"]');
+  if (inp && document.body.contains(inp)) {
+    inp.value = seg;
+    const { s } = setData(inp);
+    s.r = String(seg);
+    save();
+  }
+  return seg;
+}
+function cronoTick() {
+  const inp = crono.row?.querySelector('[data-f="r"]');
+  if (!inp || !document.body.contains(inp)) { cronoStop(false); return; }
+  if (!crono.t0) { // cuenta regresiva de preparación
+    const quedan = Math.ceil((crono.cuenta - Date.now()) / 1000);
+    if (quedan > 0) { if (inp.value !== String(quedan)) { inp.value = quedan; beepCorto(); } return; }
+    crono.t0 = Date.now();
+    crono.row.classList.remove('previa');
+    crono.row.classList.add('corriendo');
+    beep(); hablar('¡Ya!');
+  }
+  const seg = Math.floor((Date.now() - crono.t0) / 1000);
+  if (inp.value !== String(seg)) inp.value = seg;
+  if (crono.meta && seg >= crono.meta && !crono.aviso) {
+    crono.aviso = true;
+    beep(); navigator.vibrate?.([200, 80, 200]);
+    hablar('¡Meta lograda! Sigue si puedes');
+    crono.row.classList.add('meta');
+  }
+}
+
 function refreshExDone(id) {
   const card = document.querySelector(`[data-exc="${id}"]`);
   const lg = getLog(ctx.date, ctx.sid);
   const n = +card.dataset.sets;
   const sets = lg?.ex[id]?.sets || [];
   card.classList.toggle('done', sets.length >= n && sets.slice(0, n).every((s) => s.ok));
+  refreshProg();
 }
 
 const actions = {
+  irblk(btn) { closeModal(); irABloque(btn.dataset.i); },
+  crono(btn) {
+    const row = btn.closest('.set');
+    if (crono.row === row) { // detener: anota el tiempo y marca la serie
+      const seg = cronoStop(true);
+      if (seg != null) {
+        const chk = row.querySelector('[data-act="setok"]');
+        if (chk && !chk.classList.contains('on')) actions.setok(chk);
+        toast(`⏱ Resististe ${mmss(seg)}${crono.meta && seg >= crono.meta ? ' · ¡meta cumplida! 💪' : ''}`);
+      }
+      return;
+    }
+    cronoStop(true); // si había otro corriendo, lo guarda
+    try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume?.(); } catch (e) { /* sin audio */ }
+    stopTimer();
+    Object.assign(crono, { row, btn, t0: 0, meta: +btn.dataset.meta || 0, aviso: false, cuenta: Date.now() + 3000 });
+    row.classList.remove('meta');
+    row.classList.add('previa');
+    btn.textContent = '■';
+    hablar('Prepárate');
+    crono.iv = setInterval(cronoTick, 100);
+    cronoTick();
+  },
   setok(btn) {
     const { row, id, s } = setData(btn);
+    if (crono.row === row) cronoStop(true);
     s.ok = !s.ok;
     if (s.ok) {
       const wi = row.querySelector('[data-f="w"]'), ri = row.querySelector('[data-f="r"]');
@@ -1648,6 +1758,12 @@ const actions = {
     btn.classList.toggle('on', s.ok);
     refreshExDone(id);
     save();
+    // al completar un ejercicio, avisa cuál sigue
+    const card = row.closest('[data-exc]');
+    if (s.ok && card?.classList.contains('done')) {
+      const sig = estadoItems().find((x) => x.estado !== 'ok');
+      setTimeout(() => toast(sig ? `✓ Listo · Siguiente: ${sig.nombre}` : '🎉 ¡Completaste todos los ejercicios!'), 900);
+    }
   },
   addset(btn) {
     const id = btn.dataset.id;
@@ -1663,7 +1779,7 @@ const actions = {
     lg.warm = !lg.warm;
     btn.classList.toggle('on', lg.warm);
     $('#warm').classList.toggle('done', lg.warm);
-    save();
+    save(); refreshProg();
   },
   cardiook(btn) {
     const lg = getLog(ctx.date, ctx.sid, true), k = btn.dataset.key;
@@ -1676,7 +1792,7 @@ const actions = {
     }
     btn.classList.toggle('on', c.ok);
     card.classList.toggle('done', c.ok);
-    save();
+    save(); refreshProg();
   },
   tech(el) {
     const id = el.dataset.id;
@@ -1691,9 +1807,20 @@ const actions = {
       stops.push(Fig.mount(box.querySelector('svg'), ANIMS[id]));
     }
   },
-  finish() {
+  finish(btn, e, forzar) {
+    cronoStop(true);
     const lg = getLog(ctx.date, ctx.sid, true);
     const was = lg.done;
+    // antes de cerrar, revisa si quedó algo pendiente o a medias
+    const falta = estadoItems().filter((x) => x.estado !== 'ok');
+    if (!forzar && !was && falta.length) {
+      openModal('⚠️ Te faltan ejercicios', `<p class="small">Quedan <b>${falta.length}</b> sin completar. Toca uno para ir a él:</p>
+        <div class="fres">${falta.map((x) => `<button class="fres-i" data-act="irblk" data-i="${x.idx}"><b>${esc(x.nombre)}</b><span>${x.estado === 'parcial' ? `A medias: ${x.hechas} de ${x.total} series` : 'Sin hacer'}</span></button>`).join('')}</div>
+        <button class="btn primary big" data-act="closemodal">Seguir entrenando</button>
+        <button class="btn ghost big" data-act="finishforce">Terminar igual</button>`);
+      return;
+    }
+    closeModal();
     lg.done = true;
     lg.fin = new Date().toISOString();
     save(true);
@@ -1703,6 +1830,7 @@ const actions = {
     toast(was ? 'Cambios guardados' : `¡Sesión completada! 💪 ${sets} series · ${fmtMin(min)} de cardio`);
     location.hash = '#/hoy';
   },
+  finishforce(btn, e) { actions.finish(btn, e, true); },
   pw(btn) { planOffset += +btn.dataset.d; rerender(); },
   delpeso(btn) {
     if (!confirm('¿Eliminar este registro de peso?')) return;
@@ -2084,6 +2212,7 @@ function init() {
       if (el.dataset.i !== undefined) rDraft.ejercicios[+el.dataset.i][f] = el.value;
       else rDraft[f] = el.type === 'checkbox' ? el.checked : el.value;
     } else if (el.dataset.f) {
+      if (crono.row === el.closest('.set') && e.isTrusted) cronoStop(false);
       const { s } = setData(el);
       s[el.dataset.f] = el.value;
       save();
