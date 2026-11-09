@@ -216,8 +216,10 @@ const maxDolor = (lg) => Math.max(0, lg.rodilla || 0, ...Object.values(lg.dolor 
    verde: ≤3 estable · amarillo: 4-5, o sube ≥2 sobre la media de las 3 anteriores, o amaneció peor
    rojo: ≥6, o >5 dos sesiones seguidas */
 function semaforoDolor(z, date) {
-  const prev = logsOrdenados().filter((l) => l.done && l.fecha < date && dayDiff(l.fecha, date) <= 21)
-    .map((l) => ({ v: dolorDe(l, z), peor: l.manana === 'peor' })).filter((x) => x.v != null);
+  const prev = [...logsOrdenados().filter((l) => l.done && l.fecha < date && dayDiff(l.fecha, date) <= 21)
+    .map((l) => ({ f: l.fecha, v: dolorDe(l, z), peor: l.manana === 'peor' })),
+    ...(S.deportes || []).filter((e) => e.fecha < date && dayDiff(e.fecha, date) <= 21 && e.dolor?.[z] != null).map((e) => ({ f: e.fecha, v: e.dolor[z], peor: false }))]
+    .filter((x) => x.v != null).sort((a, b) => a.f.localeCompare(b.f));
   if (!prev.length) return { nivel: 'verde', v: null };
   const last = prev[prev.length - 1], ant = prev.slice(-4, -1).map((x) => x.v);
   const media = ant.length ? ant.reduce((a, b) => a + b, 0) / ant.length : last.v;
@@ -311,7 +313,7 @@ function minutosCardio(week) {
     if (l.week !== week) continue;
     for (const [k, c] of Object.entries(l.cardio || {})) m += (num(c.min) || 0) * (k === 'intervalos' ? 1.5 : 1);
   }
-  return Math.round(m + minCaminatas(S.caminatas.filter((c) => weekInfo(c.fecha).week === week)));
+  return Math.round(m + minCaminatas(S.caminatas.filter((c) => weekInfo(c.fecha).week === week)) + deportesSemana(week).reduce((a, e) => a + minEquivCardio(e), 0));
 }
 function metaCardio(wi) {
   if (S.perfil.precaucion || S.perfil.objetivo === 'musculo') return 150;

@@ -10,7 +10,7 @@ const objC = () => { const n = Date.now(); if (!_objC || n - _objC.t > 1500) _ob
 /* ---------- ¿El día cuenta? (true = sí, false = falló, null = neutro/pendiente) ---------- */
 function diaEntrenoOk(d) {
   const t = today();
-  const hecho = Object.values(S.logs).some((l) => l.done && l.fecha === d) || S.caminatas.some((c) => c.fecha === d);
+  const hecho = Object.values(S.logs).some((l) => l.done && l.fecha === d) || S.caminatas.some((c) => c.fecha === d) || (S.deportes || []).some((e) => e.fecha === d);
   if (hecho) return true;
   const wi = weekInfo(d);
   if (wi.antes) return null;
@@ -75,7 +75,7 @@ function rachas() {
 /* ---------- Logros ---------- */
 const HITOS = { entreno: [3, 7, 14, 21, 30, 60, 100], comida: [3, 7, 14, 21, 30, 60, 100], semanas: [2, 4, 8, 12, 26, 52], semanasCom: [2, 4, 8, 12, 26, 52] };
 const NOM_RACHA = {
-  entreno: ['🔥', 'días seguidos moviéndote', 'entrenando o caminando'],
+  entreno: ['🔥', 'días seguidos moviéndote', 'entrenando, caminando o con tu deporte'],
   comida: ['🥗', 'días seguidos comiendo bien', 'cerca de tu meta y con proteína'],
   semanas: ['📅', 'semanas activas seguidas', 'todas tus sesiones menos una'],
   semanasCom: ['🍽️', 'semanas de buena alimentación', '5 o más días buenos'],

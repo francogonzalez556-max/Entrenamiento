@@ -107,7 +107,7 @@ function vFicha() {
     <div class="card fcard"><h3>5. Progresión y autorregulación</h3><ul class="small">
       <li><b>Doble progresión:</b> se sube la carga solo cuando se completan todas las series en el tope del rango con 2 o más RIR; luego se vuelve al mínimo del rango.</li>
       <li><b>Saltos de carga:</b> máximo ~10% en tren superior y ~15% en tren inferior; si el incremento disponible es mayor, primero se suman 1-2 repeticiones o se alarga la fase excéntrica. Con la carga máxima disponible se progresa por repeticiones, pausas o tempo.</li>
-      <li><b>Ajustes automáticos de la sesión:</b> menos de 6 h de sueño = 1 serie menos por ejercicio · 10 o más días sin entrenar = 1 serie menos y −10% de carga · esfuerzo de la sesión anterior 9-10/10 = −10% de carga.</li>
+      <li><b>Ajustes automáticos de la sesión:</b> deporte intenso de impacto (45 min o más) el día anterior = 1 serie menos por ejercicio · menos de 6 h de sueño = 1 serie menos por ejercicio · 10 o más días sin entrenar = 1 serie menos y −10% de carga · esfuerzo de la sesión anterior 9-10/10 = −10% de carga.</li>
       <li><b>Semáforo de dolor</b> (por zona, escala 0-10, modelo de monitoreo del dolor): verde ≤3 → sigue; amarillo 4-5, alza de 2 puntos o "amaneció peor" → −10% de carga en los ejercicios de esa zona; rojo ≥6 → se cambian por variantes isométricas o sin carga en esa zona.</li>
       <li><b>Descarga sugerida</b> ante esfuerzo promedio ≥8,5 o dos señales de fatiga: esfuerzo alto, 3 o más noches cortas o dolor en alza.</li>
       <li><b>Señales de alerta</b> registradas al cerrar cada sesión, con derivación a urgencia (SAMU 131), consulta en el día o evaluación profesional.</li>
@@ -117,6 +117,7 @@ function vFicha() {
 
     <div class="card fcard"><h3>${excl ? 7 : 6}. Registro real</h3><ul class="small">
       <li><b>Sesiones completadas:</b> ${hechos.length} en total · ${ult4.length} de ${PL.orden.length * 4} planificadas en las últimas 4 semanas.</li>
+      ${(() => { const r = resumenDeportes((S.deportes || []).filter((e) => dayDiff(e.fecha, t) < 28)); return r.length ? `<li><b>Deportes (últimas 4 semanas):</b> ${r.map(([n, x]) => `${esc(n)} ${x.min} min (${x.n} ${x.n === 1 ? 'vez' : 'veces'})`).join(' · ')}.</li>` : ''; })()}
       <li><b>Esfuerzo percibido promedio</b> (últimas 8 sesiones): ${rpeProm}/10.</li>
       ${dolor ? `<li><b>Dolor por zona</b> (últimas sesiones):<ul>${dolor}</ul></li>` : ''}
     </ul>

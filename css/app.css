@@ -775,3 +775,43 @@ details.banderas .chkl { font-size: .85rem; color: var(--tx); margin: 6px 0; }
 .fi-w .fi { border-bottom: 0; }
 .alts { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; margin: .1rem 0 .2rem; }
 .alts .tab { font-size: .75rem; padding: .2rem .5rem; }
+
+/* ---------- v1.18: deportes ---------- */
+.dep-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .45rem; margin-bottom: .6rem; }
+.dep-b { display: flex; flex-direction: column; align-items: center; gap: .2rem; padding: .6rem .3rem; border-radius: 12px; border: 1px solid var(--line); background: var(--card3, transparent); color: inherit; font: inherit; font-size: .78rem; line-height: 1.2; text-align: center; cursor: pointer; }
+.dep-b span { font-size: 1.6rem; }
+.dep-b:active { transform: scale(.97); }
+.dep-sel { display: flex; align-items: center; gap: .5rem; }
+.dep-sel b { flex: 1; font-size: 1.05rem; }
+.dep-ico { font-size: 1.8rem; }
+.seg.seg3 button { flex: 1; }
+
+.seg.seg3 { grid-template-columns: repeat(3, 1fr); }
+.chips.dep-subs { flex-wrap: wrap; }
+.chips.dep-subs .tab { flex: 0 1 auto; padding: 7px 10px; font-family: inherit; font-size: .82rem; letter-spacing: 0; font-weight: 600; text-transform: none; }
+.dep-prev { margin: .5rem 0; padding: .6rem .7rem; border-radius: 10px; background: color-mix(in srgb, var(--acc) 10%, var(--card)); font-size: .92rem; line-height: 1.4; }
+.row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.prev.dep-prev { font-size: .92rem; font-weight: 700; line-height: 1.35; font-family: inherit; text-transform: none; letter-spacing: 0; }
+
+.dep-list { list-style: none; margin: .3rem 0 .6rem; padding: 0; }
+.dep-li { display: flex; align-items: center; gap: .6rem; padding: .5rem 0; border-bottom: 1px solid var(--line); }
+.dep-li .grow { display: flex; flex-direction: column; gap: .1rem; min-width: 0; }
+.dep-li-i { font-size: 1.5rem; }
+
+/* ---------- v1.20: GPS en vivo ---------- */
+.dep-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.dep-b.on { border-color: var(--acc); background: color-mix(in srgb, var(--acc) 16%, var(--card)); }
+.gps-top { display: flex; justify-content: space-between; align-items: center; font-weight: 700; margin: .2rem 0 .4rem; }
+.gps-acc { font-size: .8rem; padding: .2rem .55rem; border-radius: 99px; background: color-mix(in srgb, var(--good, #2e9d00) 22%, var(--card)); }
+.gps-acc.mala { background: color-mix(in srgb, var(--warn, #f5a623) 28%, var(--card)); }
+.gps-big { text-align: center; margin: .4rem 0 .6rem; }
+.gps-big b { display: block; font-family: var(--display); font-size: 4.2rem; line-height: 1; letter-spacing: .02em; }
+.gps-big span, .gps-grid span { color: var(--mut); font-size: .8rem; }
+.gps-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+.gps-grid > div { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: .7rem; text-align: center; display: flex; flex-direction: column; }
+.gps-grid b { font-family: var(--display); font-size: 2.1rem; line-height: 1.05; }
+.gps-meta { margin: .7rem 0 .2rem; }
+.gps-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: .7rem 0; }
+.ruta { width: 100%; height: auto; background: var(--card); border: 1px solid var(--line); border-radius: 14px; margin: .4rem 0; }
+.dep-gps { font-weight: 700; margin: .3rem 0; }
+.gps-banner { display: block; position: sticky; top: 0; z-index: 9; margin: 0 0 .5rem; padding: .55rem .9rem; background: #d81b3a; color: #fff; font-size: .9rem; text-decoration: none; text-align: center; }

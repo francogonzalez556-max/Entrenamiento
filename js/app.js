@@ -308,6 +308,13 @@ function ajusteSesion(date, sid) {
   const b = bienestarDe(date);
   // sueño y estrés del día (chequeo de bienestar)
   if (b?.sueno != null && b.sueno < 6) { res.menos = 1; res.msgs.push('Dormiste menos de 6 horas: hoy 1 serie menos por ejercicio y deja 2-3 repeticiones en reserva. Entrenar cansado aumenta el riesgo de lesión.'); }
+  const ayerD = iso(addDays(parse(date), -1));
+  const depFuerte = (S.deportes || []).filter((e) => (e.fecha === ayerD || e.fecha === date) && e.int === 3 && e.min >= 45 && depInfo(e).impacto >= 1);
+  if (depFuerte.length) {
+    const e = depFuerte[0];
+    res.menos = Math.max(res.menos, 1);
+    res.msgs.push(`${e.fecha === date ? 'Hoy' : 'Ayer'} hiciste ${depInfo(e).corto.toLowerCase()} intenso (${e.min} min): hoy 1 serie menos por ejercicio para recuperar. Si te sientes muy cargado, cambia la sesión por cardio suave.`);
+  }
   if (b?.estres === 3) res.msgs.push('Estrés alto hoy: está bien hacer una sesión más liviana. Moverte igual ayuda a bajarlo.');
   if (!prev.length) return res;
   const dias = dayDiff(prev[prev.length - 1].fecha, date);
@@ -702,6 +709,7 @@ function vHoy() {
     ${!p.parq ? '<a class="card row-link nuevo" href="#/salud"><span>🩺</span><div class="grow"><b>Completa tu cuestionario de salud</b><span class="small muted">7 preguntas, 1 minuto. Para entrenar seguro.</span></div>›</a>' : ''}
     ${p.precaucion ? '<a class="card row-link" href="#/salud"><span>🩺</span><div class="grow"><b>Modo precaución activo</b><span class="small muted">Consulta a tu médico antes de subir la intensidad.</span></div>›</a>' : ''}
     ${p.revisar ? '<a class="card row-link nuevo" href="#/perfil"><span>✨</span><div class="grow"><b>Nuevo: personaliza tu plan</b><span class="small muted">Objetivo, dónde entrenas, equipo y días. Si no cambias nada, tu plan sigue igual.</span></div>›</a>' : ''}
+    ${gpsPendienteHTML()}
     ${bandera ? `<div class="card alerta alto"><b>🚩 Marcaste una señal de alerta el ${fmt(bandera.fecha)}</b><p class="small">${banderaMsg(bandera.alertas)}</p><button class="btn small-btn" data-act="alertaok" data-k="${logKey(bandera.fecha, bandera.sid)}">Ya lo revisé con un profesional</button></div>` : ''}
     ${conDolor ? `<div class="card"><h3>🦵 ¿Cómo amaneció tu ${zonasUsuario().length === 1 && zonasUsuario()[0] !== 'general' ? ZONAS[zonasUsuario()[0]].toLowerCase() : 'molestia'}?</h3><p class="small muted">Después de ${esc(nombreSes(conDolor))} (${fmt(conDolor.fecha, true)}) marcaste ${maxDolor(conDolor)}/10. Es la clave para saber si la carga fue la adecuada.</p>
       <div class="btns"><button class="btn small-btn" data-act="manana" data-k="${logKey(conDolor.fecha, conDolor.sid)}" data-v="igual">Igual o mejor</button><button class="btn small-btn" data-act="manana" data-k="${logKey(conDolor.fecha, conDolor.sid)}" data-v="peor">Peor</button></div></div>` : ''}
@@ -719,6 +727,7 @@ function vHoy() {
       ${camHoy.length ? `<p class="small good"><b>Hoy:</b> ${resumenCam(camHoy)}</p>` : ''}
       <form id="fcamina" class="inline"><input name="pasos" type="number" inputmode="numeric" placeholder="pasos" aria-label="Pasos"><input name="km" type="text" inputmode="decimal" placeholder="km" aria-label="Distancia en km"><button class="btn primary" aria-label="Guardar caminata">+</button></form>
       <p class="small muted">Copia los datos de la app Fitness o Salud del iPhone. Esta semana: ${resumenCam(S.caminatas.filter((c) => weekInfo(c.fecha).week === semana)) || 'sin caminatas aún'}.</p></div>
+    ${deportesHoyHTML(t, semana)}
     ${!wi.antes ? cardioSemanaHTML(wi) : ''}
     <a class="card row-link" href="#/comida"><span>🍽️</span><div class="grow"><b>Comida de hoy</b><span class="small muted">${p.ocultarKcal ? '' : `${Math.round(totHoy.k).toLocaleString('es-CL')} de ${objetivos().kcal.toLocaleString('es-CL')} kcal · `}${Math.round(totHoy.pr)} g proteína · ${(S.agua || {})[t] || 0} vasos de agua</span></div>›</a>
     ${pedirPeso && !wi.antes ? `<div class="card"><h3>⚖️ Registro semanal de peso</h3><form id="fpesoHoy" class="inline"><input name="kg" type="text" inputmode="decimal" placeholder="kg en ayunas" required><input name="cintura" type="text" inputmode="decimal" placeholder="cintura cm"><button class="btn primary">Guardar</button></form></div>` : ''}
@@ -730,7 +739,7 @@ function vHoy() {
     <p class="small muted center">Una semana cuenta como activa con todas tus sesiones menos una: un día de gracia por semana.</p>
     <div class="card small-card"><h3>❤️ Tus zonas de pulso</h3>
       <p><b>Zona 2 (suave):</b> ${fz.z2[0]}–${fz.z2[1]} lpm · puedes hablar en frases.<br><b>Fuerte (intervalos):</b> ${fz.fuerte[0]}–${fz.fuerte[1]} lpm · hablar cuesta.<br><span class="muted small">FC máx. estimada: ${fz.max} lpm. Si tu máquina o reloj no mide pulso, guíate por la conversación.</span></p></div>
-  </section>`;
+  </section><div id="modal" class="sheet"></div>`;
 }
 
 /* ---- SESIÓN ---- */
@@ -862,7 +871,7 @@ function vPlan() {
   const dias = [1, 2, 3, 4, 5, 6, 0].map((dow) => {
     const d = dateOf(week, dow), sid = sidDelDia(dow, week);
     if (!sid) {
-      return `<div class="pday rest ${d === t ? 'now' : ''}"><div class="pd"><b>${DIAS[dow].slice(0, 3)}</b><span>${fmt(d)}</span></div><div class="grow muted small">Descanso · opcional: caminata 20-40 min (regístrala en Hoy)</div></div>`;
+      return `<div class="pday rest ${d === t ? 'now' : ''}"><div class="pd"><b>${DIAS[dow].slice(0, 3)}</b><span>${fmt(d)}</span></div><div class="grow muted small">${depDiaTxt(d) ? `Descanso · ${depDiaTxt(d)}` : 'Descanso · opcional: caminata 20-40 min o tu deporte (regístralo en Hoy)'}</div></div>`;
     }
     const movida = S.movidas?.[week]?.[sid] !== undefined && S.movidas[week][sid] !== PLAN().ses[sid].dow;
     const ses = PLAN().ses[sid], ok = doneEnSemana(week, sid);
@@ -870,7 +879,7 @@ function vPlan() {
     const cardio = its.filter((x) => x.k === 'cardio').map((x) => x.rx.titulo).join(' + ');
     const nEj = its.filter((x) => x.k === 'ex').length;
     return `<div class="pday ${ok ? 'ok' : ''} ${d === t ? 'now' : ''}"><a class="pday-l" href="#/sesion/${d}/${sid}"><div class="pd"><b>${DIAS[dow].slice(0, 3)}</b><span>${fmt(d)}</span></div>
-      <div class="grow"><b>${ses.nombre}${movida ? ' <span class="movida">↪ movida</span>' : ''}</b><span class="small muted">${nEj} ejercicios · ${cardio}</span></div><span class="st">${ok ? '✓' : '›'}</span></a>
+      <div class="grow"><b>${ses.nombre}${movida ? ' <span class="movida">↪ movida</span>' : ''}</b><span class="small muted">${nEj} ejercicios · ${cardio}${depDiaTxt(d) ? ` · ${depDiaTxt(d)}` : ''}</span></div><span class="st">${ok ? '✓' : '›'}</span></a>
       ${ok ? '' : `<button class="mover" data-act="moveropen" data-sid="${sid}" data-w="${week}" aria-label="Mover ${esc(ses.nombre)}">⇄</button>`}</div>`;
   }).join('');
   return `${header('Plan')}<section class="wrap">
@@ -918,7 +927,7 @@ function vProgreso() {
     semanas.push('S' + (((w - 1) % 12) + 1));
     minutos.push(Object.values(S.logs).filter((l) => l.week === w).reduce((s, l) => s + Object.values(l.cardio || {}).reduce((a, c) => a + (num(c.min) || 0), 0), 0));
     const cw = S.caminatas.filter((c) => weekInfo(c.fecha).week === w);
-    minCam.push(minCaminatas(cw));
+    minCam.push(minCaminatas(cw) + deportesSemana(w).reduce((a, e) => a + minEquivCardio(e), 0));
     kmCam.push(r1(sumar(cw, 'km')));
     pasosCam.push(sumar(cw, 'pasos'));
   }
@@ -943,9 +952,10 @@ function vProgreso() {
       <p class="small muted">${conPeso ? (progModo === '1rm' ? '1RM estimado por sesión (kg): lo máximo que podrías levantar 1 vez' : 'Peso máximo por sesión (kg)') : esTiempo(ex) ? 'Mejor tiempo (s)' : 'Máximo de reps'} · récord: <b>${fmtN(best)}</b></p>${chartLine(pts, { label: 'progreso ejercicio', dec: true })}`;
   }
   const dolorCharts = zonasUsuario().map((z) => {
-    const pts = L.filter((l) => l.done && dolorDe(l, z) != null).map((l) => ({ x: +parse(l.fecha), y: dolorDe(l, z), t: fmt(l.fecha) }));
+    const pts = [...L.filter((l) => l.done && dolorDe(l, z) != null).map((l) => ({ x: +parse(l.fecha), y: dolorDe(l, z), t: fmt(l.fecha) })),
+      ...(S.deportes || []).filter((e) => e.dolor?.[z] != null).map((e) => ({ x: +parse(e.fecha), y: e.dolor[z], t: `${fmt(e.fecha)} · ${depInfo(e).corto}` }))].sort((a, b) => a.x - b.x);
     const s = semaforoDolor(z, iso(addDays(new Date(), 1)));
-    return `<h4>${z === 'general' ? 'Molestias articulares' : ZONAS[z]} <span class="sema ${s.nivel}">${s.nivel === 'verde' ? '🟢 estable' : s.nivel === 'amarillo' ? '🟡 vigilar' : '🔴 alto'}</span></h4>${chartLine(pts, { yMin: 0, yMax: 10, label: 'dolor ' + z, vacio: 'Se registra al terminar cada sesión.', h: 130 })}`;
+    return `<h4>${z === 'general' ? 'Molestias articulares' : ZONAS[z]} <span class="sema ${s.nivel}">${s.nivel === 'verde' ? '🟢 estable' : s.nivel === 'amarillo' ? '🟡 vigilar' : '🔴 alto'}</span></h4>${chartLine(pts, { yMin: 0, yMax: 10, label: 'dolor ' + z, vacio: 'Se registra al terminar cada sesión o deporte.', h: 130 })}`;
   }).join('');
   const totalMin = Object.values(S.logs).reduce((s, l) => s + Object.values(l.cardio || {}).reduce((a, c) => a + (num(c.min) || 0), 0), 0) + minCaminatas(S.caminatas);
   const cams = [...S.caminatas].sort((a, b) => b.fecha.localeCompare(a.fecha));
@@ -970,13 +980,14 @@ function vProgreso() {
       <details><summary class="small">Ver registros</summary><ul class="plist">${[...pesos].reverse().map((x) => `<li><span>${fmt(x.fecha)}</span><b>${fmtN(x.kg)} kg</b><span class="muted">${x.cintura ? fmtN(x.cintura) + ' cm' : ''}</span><button class="link danger" data-act="delpeso" data-f="${x.fecha}" aria-label="Eliminar">✕</button></li>`).join('')}</ul></details>
     </div>
     <div class="card"><h3>📅 Constancia</h3><div class="cgrid2"><div class="grow-row head" style="grid-template-columns:40px repeat(${PL.orden.length},1fr)"><span></span>${PL.orden.map((s) => `<b>${DIAS[PL.ses[s].dow].slice(0, 2)}</b>`).join('')}</div>${grid}</div></div>
-    <div class="card"><h3>🫀 Minutos de cardio por semana</h3>${chartBars(semanas, minutos, { min: 30, stack: minCam, label: 'minutos cardio' })}<p class="legend small"><i class="lg1"></i>${PL.cardio.label} <i class="lg2"></i>Caminata (estimado: 12 min por km)</p><p class="small muted">Total acumulado: <b>${Math.round(totalMin)} min</b>. Recomendación de salud: 150+ min/semana.</p></div>
+    <div class="card"><h3>🫀 Minutos de cardio por semana</h3>${chartBars(semanas, minutos, { min: 30, stack: minCam, label: 'minutos cardio' })}<p class="legend small"><i class="lg1"></i>${PL.cardio.label} <i class="lg2"></i>Caminata y deportes (caminata: 12 min por km; deporte intenso: cada minuto vale por 2)</p><p class="small muted">Total acumulado: <b>${Math.round(totalMin)} min</b>. Recomendación de salud: 150+ min/semana.</p></div>
     <div class="card"><h3>🚶 Caminatas</h3>
       <form id="fcamina2" class="inline"><input name="fecha" type="date" value="${t}" required><input name="pasos" type="number" inputmode="numeric" placeholder="pasos" aria-label="Pasos"><input name="km" type="text" inputmode="decimal" placeholder="km" aria-label="Distancia en km"><button class="btn primary" aria-label="Guardar caminata">+</button></form>
       <p class="small muted">Pasos por semana</p>${chartBars(semanas, pasosCam, { min: 10000, label: 'pasos por semana' })}<p class="small muted">Km por semana</p>${chartBars(semanas, kmCam, { min: 5, label: 'km caminados', dec: true })}
       <p class="small muted">Total: <b>${cams.length}</b> caminatas · <b>${fmtN(sumar(cams, 'km'))} km</b> · <b>${sumar(cams, 'pasos').toLocaleString('es-CL')}</b> pasos</p>
       ${cams.length ? `<details><summary class="small">Ver registros</summary><ul class="plist">${cams.map((c) => `<li><span>${fmt(c.fecha)}</span><b>${resumenCam([c])}</b><button class="link danger" data-act="delcam" data-id="${c.id}" aria-label="Eliminar">✕</button></li>`).join('')}</ul></details>` : ''}
     </div>
+    ${deportesProgresoHTML()}
     <div class="card"><h3>🏋️ Fuerza</h3>${ejChart}${recordsHTML(L)}<p class="small muted">Volumen total levantado: <b>${Math.round(vol).toLocaleString('es-CL')} kg</b></p></div>
     ${volumenHTML(L, cur)}
     ${medidasHTML(t)}
@@ -1536,6 +1547,7 @@ function vComida() {
       <div class="pbar thin"><i style="width:${pctP}%" class="prot"></i></div><p class="small muted">Proteína: ${Math.round(pctP)}% de tu meta${o.real?.tdee && !o.real.fuera ? ' · ⚙️ meta calibrada con tus registros' : ''}</p>`}
     </div>
     ${alertasHTML(alNut)}
+    ${deporteComidaHTML(d)}
     ${!alNut.suficiente ? `<p class="small muted center">Los avisos de alimentación se activan con 5 días completos (2 o más comidas anotadas) en las últimas 2 semanas. Llevas ${alNut.completos}.</p>` : ''}
     ${meals}
     ${calidadHTML(d)}
@@ -2107,7 +2119,7 @@ function vMas() {
     ${ayudaHTML('')}
     <div class="card small-card"><h3>ℹ️ Importante</h3><p class="small">Esta app orienta y educa con criterios de entrenamiento, nutrición y kinesiología basados en evidencia, pero <b>no reemplaza la evaluación de un médico, nutricionista, kinesiólogo o psicólogo</b>. Ante dudas sobre tu salud, consulta a un profesional.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">v1.17 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">v1.20 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 
@@ -2193,6 +2205,7 @@ function route() {
     case 'enfoque': html = vEnfoque(); break;
     case 'series': html = vSeries(); break;
     case 'ficha': html = vFicha(); break;
+    case 'gps': html = vGps(); break;
     case 'recordatorios': html = vRecordatorios(); break;
     case 'ajustes': html = vAjustes(); break;
     case 'timer':
@@ -2203,6 +2216,7 @@ function route() {
     default: v = 'hoy'; html = vHoy();
   }
   main.innerHTML = html;
+  if (GPS && v !== 'gps') main.insertAdjacentHTML('afterbegin', gpsBannerHTML());
   if (v !== 'comida') comidaDia = null;
   if (v !== 'rutina') rDraft = null;
   if (v !== 'perfil' && v !== 'onboarding') wz = null;
@@ -2324,6 +2338,8 @@ function refreshExDone(id) {
 }
 
 const actions = {
+  ...accionesDeporte,
+  ...accionesGps,
   irblk(btn) { closeModal(); irABloque(btn.dataset.i); },
   crono(btn) {
     const row = btn.closest('.set');
@@ -3039,6 +3055,8 @@ function resumenTexto() {
   t += `Cardio esta semana: ${minutosCardio(weekInfo(today()).week)} min\n`;
   const cam = S.caminatas.filter((c) => dayDiff(c.fecha, today()) <= 28).sort((a, b) => a.fecha.localeCompare(b.fecha));
   if (cam.length) t += `\nCaminatas (últimas 4 semanas):\n${cam.map((c) => `- ${fmt(c.fecha, true)}: ${resumenCam([c])}`).join('\n')}\n`;
+  const deps = (S.deportes || []).filter((e) => dayDiff(e.fecha, today()) <= 28).sort((a, b) => a.fecha.localeCompare(b.fecha));
+  if (deps.length) t += `\nDeportes (últimas 4 semanas):\n${deps.map((e) => `- ${fmt(e.fecha, true)}: ${depInfo(e).nombre}: ${[depCalc(e).dist, e.seg ? fmtTiempo(e.seg) : e.min + ' min', depCalc(e).ritmo].filter(Boolean).join(', ')} (${INTENSIDAD[e.int - 1][1].toLowerCase()})${e.dolor ? `, dolor ${Object.entries(e.dolor).map(([z, v]) => `${ZONAS[z].toLowerCase()} ${v}/10`).join(', ')}` : ''}`).join('\n')}\n`;
   return t;
 }
 
@@ -3056,6 +3074,12 @@ function init() {
   });
   main.addEventListener('input', (e) => {
     const el = e.target;
+    if (el.dataset.depdolor && depDraft) {
+      depDraft.dolor[el.dataset.depdolor] = +el.value;
+      const o = $(`#depdolV-${el.dataset.depdolor}`); if (o) o.textContent = el.value;
+      return;
+    }
+    if (el.dataset.depf !== undefined && depDraft) { depLeer(); const o = $('#depkcal'); if (o) o.innerHTML = depPrevTxt(); return; }
     if (el.id === 'fsearch') {
       sheet.q_ = el.value;
       $('#fres').innerHTML = resultadosHTML(el.value);
