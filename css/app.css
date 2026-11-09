@@ -815,3 +815,12 @@ details.banderas .chkl { font-size: .85rem; color: var(--tx); margin: 6px 0; }
 .ruta { width: 100%; height: auto; background: var(--card); border: 1px solid var(--line); border-radius: 14px; margin: .4rem 0; }
 .dep-gps { font-weight: 700; margin: .3rem 0; }
 .gps-banner { display: block; position: sticky; top: 0; z-index: 9; margin: 0 0 .5rem; padding: .55rem .9rem; background: #d81b3a; color: #fff; font-size: .9rem; text-decoration: none; text-align: center; }
+
+/* ---------- v1.21: cantidad por alimento ---------- */
+.ing-q { display: flex; align-items: center; gap: .5rem; margin: .1rem 0 .35rem; flex-wrap: wrap; }
+.ing-q .qb { min-width: 2.4rem; height: 2.2rem; padding: 0; font-size: 1.2rem; }
+.ing-v { min-width: 4.5rem; }
+.ayuda-cant { margin: .3rem 0 .5rem; }
+.ayuda-cant summary { cursor: pointer; }
+.ayuda-cant ul { margin: .3rem 0; padding-left: 1.1rem; }
+.alts .tab { font-family: inherit; text-transform: none; letter-spacing: 0; font-size: .78rem; font-weight: 600; }

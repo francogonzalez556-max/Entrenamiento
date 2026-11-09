@@ -1077,7 +1077,11 @@ function buscar(q) {
     .map(({ a }) => a);
 }
 /* ---- Varios alimentos de una vez: "pan con jamón, tomate y mostaza" ---- */
-const NUM_TXT = { un: 1, una: 1, uno: 1, medio: 0.5, media: 0.5, dos: 2, tres: 3, cuatro: 4, cinco: 5 };
+const NUM_TXT = { un: 1, una: 1, uno: 1, medio: 0.5, media: 0.5, cuarto: 0.25, 'un cuarto': 0.25, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, doble: 2 };
+// medidas caseras que se ignoran al buscar ("2 tazas de arroz" → 2 porciones de arroz)
+const UNID_RX = /^(?:unidad(?:es)?|u|tazas?|vasos?|platos?|porcion(?:es)?|rebanadas?|laminas?|trozos?|cucharadas?|cdas?|cucharaditas?|cdtas?|punados?|latas?|scoops?|piezas?|presas?)\b\s*/;
+const NUM_RX = '(\\d+(?:[.,]\\d+)?|\\d+\\/\\d+|un cuarto|una|uno|un|medio|media|cuarto|dos|tres|cuatro|cinco|seis|doble)';
+const valNum = (t) => (NUM_TXT[t] != null ? NUM_TXT[t] : t.includes('/') ? t.split('/').reduce((a, b) => a / b) : +t.replace(',', '.'));
 function partesTexto(q) {
   const n = normal(q).replace(/\s+/g, ' ').trim();
   if (!n) return [];
@@ -1092,15 +1096,35 @@ function partesTexto(q) {
   return out.filter((x) => x.replace(/\b(de|del|la|el|los|las)\b/g, '').trim().length >= 2);
 }
 function cantidadDe(sg) {
-  let m = sg.match(/^(\d+(?:[.,]\d+)?|\d+\/\d+)\s*(g|gr|grs|gramos|ml|cc)?\s+(?:de\s+)?(.+)$/);
+  let t = sg.trim().replace(/½/g, '1/2 ').replace(/¼/g, '1/4 ').replace(/\s+/g, ' ').trim(), q = null, gr = null;
+  // al inicio: "2 huevos", "150 g arroz", "media palta", "1/2 taza de leche"
+  let m = t.match(new RegExp('^' + NUM_RX + '\\s*(kg|g|gr|grs|gramos|ml|cc)?(?=\\s|$)\\s*'));
   if (m) {
-    const v = m[1].includes('/') ? m[1].split('/').reduce((a, b) => a / b) : +m[1].replace(',', '.');
-    return m[2] ? { gr: v, resto: m[3] } : { q: v, resto: m[3] };
+    const v = valNum(m[1]);
+    if (m[2]) gr = m[2] === 'kg' ? v * 1000 : v; else q = v;
+    t = t.slice(m[0].length);
+  } else {
+    // al final: "huevos x2", "arroz 150 g", "pan 2"
+    m = t.match(/\s+x?\s*(\d+(?:[.,]\d+)?)\s*(kg|g|gr|grs|gramos|ml|cc)?$/);
+    if (m) { const v = valNum(m[1]); if (m[2]) gr = m[2] === 'kg' ? v * 1000 : v; else q = v; t = t.slice(0, m.index); }
   }
-  m = sg.match(/^(un|una|uno|medio|media|dos|tres|cuatro|cinco)\s+(?:de\s+)?(.+)$/);
-  if (m) return { q: NUM_TXT[m[1]], resto: m[2] };
-  return { q: 1, resto: sg, sinCant: true };
+  let unidad = null;
+  const um = q != null ? t.match(UNID_RX) : null;
+  if (um) { unidad = um[0].trim().replace(/(es|s)$/, ''); t = t.slice(um[0].length); }
+  t = t.replace(/^(de|del)\s+/, '').trim();
+  if (q == null && gr == null) return { q: 1, resto: t, sinCant: true };
+  return gr != null ? { gr, resto: t } : { q, resto: t, unidad };
 }
+// alimento por defecto para palabras sueltas comunes (lo que ya comiste antes tiene prioridad)
+const PREF_ALIM = {
+  arroz: 'Arroz blanco cocido', huevo: 'Huevo cocido o revuelto', pan: 'Marraqueta', marraqueta: 'Marraqueta', leche: 'Leche semidescremada',
+  palta: 'Palta', pollo: 'Pechuga de pollo a la plancha', pechuga: 'Pechuga de pollo a la plancha', carne: 'Carne de vacuno magra (posta, lomo)',
+  papa: 'Papa cocida', fideo: 'Fideos / tallarines cocidos', tallarin: 'Fideos / tallarines cocidos', te: 'Café o té sin azúcar', cafe: 'Café o té sin azúcar',
+  queso: 'Queso mantecoso / gauda', jamon: 'Jamón de pavo', tomate: 'Tomate', lechuga: 'Lechuga', azucar: 'Azúcar', aceite: 'Aceite (oliva o vegetal)',
+  yogurt: 'Yogurt batido / normal', avena: 'Avena', platano: 'Plátano', manzana: 'Manzana', naranja: 'Naranja', atun: 'Atún al agua',
+  ensalada: 'Ensalada de lechuga y tomate', lenteja: 'Lentejas guisadas', poroto: 'Porotos cocidos (blancos, tórtola)', mantequilla: 'Mantequilla / margarina',
+  agua: 'Agua / agua mineral', bebida: 'Bebida azucarada', jugo: 'Jugo natural de frutas (sin azúcar)', salmon: 'Salmón', pescado: 'Merluza / reineta al horno',
+};
 function matchAlimento(term) {
   const limpio = term.replace(/\b(de|del|la|el|los|las|un|una)\b/g, ' ').replace(/\s+/g, ' ').trim();
   const prueba = (q) => { const r = q ? buscar(q) : null; return r && r.length ? r : null; };
@@ -1112,16 +1136,31 @@ function matchAlimento(term) {
   if (!r) for (const w of limpio.split(' ').filter((x) => x.length >= 3).sort((a, b) => b.length - a.length)) { r = unir(prueba(w), prueba(sing(w))); if (r) break; }
   if (!r) return [];
   // orden: lo que ya has comido antes, luego el nombre que empieza igual y el más simple (más corto)
-  const rec = new Set(recientes().map((a) => a.n));
-  const pun = (a) => (rec.has(a.n) ? 100 : 0) + (normal(a.n).startsWith(sg) ? 50 : 0) - a.n.length;
+  const rec = new Set(recientes().map((a) => a.n)), pref = PREF_ALIM[sg] || PREF_ALIM[limpio];
+  const pun = (a) => (rec.has(a.n) ? 200 : 0) + (pref && a.n === pref ? 100 : 0) + (normal(a.n).startsWith(sg) ? 50 : 0) - a.n.length;
   return [...r].sort((a, b) => pun(b) - pun(a));
 }
 const snapFood = (food) => ({ id: food.id, n: food.n, p: food.p, k: food.k, pr: food.pr, c: food.c || 0, g: food.g || 0, gp: food.gp || null, u: food.u || 'g', cat: food.cat });
+// "media palta" con porción "¼ unidad" → 2 porciones · "1/2 taza de avena" con porción "½ taza" → 1 porción
+function porcionesDe(food, c) {
+  if (c.gr != null || c.sinCant) return c.q;
+  const pm = normal(food.p).match(/^(½|¼|\d+(?:[.,]\d+)?)\s+([a-zñ]+)/);
+  if (!pm) return c.q;
+  const frac = pm[1] === '½' ? 0.5 : pm[1] === '¼' ? 0.25 : +pm[1].replace(',', '.');
+  const pu = pm[2].replace(/(es|s)$/, ''), cu = c.unidad;
+  const mismaMedida = cu ? pu.slice(0, 4) === cu.slice(0, 4) : pu.startsWith('unidad') || pu === 'de';
+  return frac > 0 && mismaMedida ? Math.round((c.q / frac) * 4) / 4 : c.q;
+}
 function ingDesde(food, c, alts, term) {
   const snap = snapFood(food), porG = c.gr != null && food.gp;
-  const ri = { food: snap, marca: 'prom', modo: porG ? 'g' : 'u', q: porG || c.gr != null ? 1 : c.q, gr: porG ? c.gr : Math.round(food.gp || 100), ug: food.gp || null };
+  const ri = { food: snap, marca: 'prom', modo: porG ? 'g' : 'u', q: porG || c.gr != null ? 1 : porcionesDe(food, c), gr: porG ? c.gr : Math.round(food.gp || 100), ug: food.gp || null };
   const x = calcIng(ri);
   return { food: snap, n: snap.n, u: snap.u, marca: x.marca, mv: 'prom', modo: ri.modo, q: ri.q, ug: ri.ug, gr: x.gr == null ? null : r1(x.gr), k: x.k, pr: x.pr, c: x.c, g: x.g, alts, term };
+}
+// recalcula calorías y macros de un ingrediente tras cambiar cantidad o modo
+function recalcIng(it) {
+  const x = calcIng({ food: it.food, marca: it.mv || 'prom', modo: it.modo, q: it.q, gr: it.gr, ug: it.ug || it.food.gp });
+  Object.assign(it, { k: x.k, pr: x.pr, c: x.c, g: x.g, gr: it.modo === 'g' ? it.gr : x.gr == null ? null : r1(x.gr) });
 }
 function platoDesdeTexto(txt) {
   const ings = [], noEnc = [];
@@ -1358,7 +1397,10 @@ function sheetHTML() {
     body = recHTML();
   } else {
     body = `<input id="fsearch" type="search" placeholder="Busca o escribe todo: pan con jamón y tomate" autocomplete="off" value="${esc(sheet.q_)}">
-      <p class="small muted">💡 Puedes escribir varios de una vez, con cantidades: <i>2 huevos, 1 marraqueta y café con leche</i>.</p>
+      <details class="small muted ayuda-cant"><summary>💡 Escribe varios de una vez, con su cantidad</summary>
+        <p>Separa con comas o "y", y pon la cantidad antes de cada alimento:</p>
+        <ul><li><b>2 huevos</b>, <b>1 marraqueta</b> y <b>café con leche</b> → porciones</li><li><b>150 g de arroz</b>, <b>200 ml de leche</b> → gramos o ml</li><li><b>media palta</b>, <b>1/2 taza de avena</b>, <b>un cuarto de pollo</b></li><li>También al final: <b>pan x2</b>, <b>arroz 150 g</b></li></ul>
+        <p>Si no pones cantidad se usa 1 porción. Después ajustas cada una con − y +.</p></details>
       <button class="btn scanbtn" data-act="scanopen">📷 Escanear código de barras</button>
       <div id="fres" class="fres">${resultadosHTML(sheet.q_)}</div>
       <button class="btn recbtn" data-act="recnew">🍳 Preparación con ingredientes</button>
@@ -1444,11 +1486,18 @@ function recHTML() {
     const fs = (it.alts || []).map((id) => todosAlimentos().find((a) => a.id === id)).filter(Boolean);
     return fs.length ? `<div class="alts"><span class="small muted">¿Era otro?</span>${fs.map((a) => `<button class="tab" data-act="recalt" data-i="${i}" data-id="${esc(a.id)}">${esc(a.n)}</button>`).join('')}</div>` : '';
   };
-  const rows = R.ings.map((it, i) => `<div class="fi-w"><div class="fi"><div class="grow tap" data-act="recingedit" data-i="${i}"><b>${esc(it.n)}${it.marca ? ` · ${esc(it.marca)}` : ''}</b><span class="small muted">${it.gr != null ? `${fmtN(it.gr)} ${it.u || 'g'}` : `${fmtN(it.q, 2)} × ${esc(it.food.p)}`} · ${fmtN(it.pr)} g prot.${it.term ? ` · escribiste "${esc(it.term)}"` : ''}</span></div><span>${Math.round(it.k)}</span><button class="link danger" data-act="recdel" data-i="${i}" aria-label="Quitar">✕</button></div>${altsDe(it, i)}</div>`).join('')
+  const qCtl = (it, i) => {
+    const g = it.modo === 'g', u = it.u || 'g', puedeG = !!per100(it.food, opDe({ food: it.food, marca: it.mv || 'prom' }));
+    return `<div class="ing-q"><button class="btn qb" data-act="ingq" data-i="${i}" data-d="-1" aria-label="Menos">−</button>
+      <span class="ing-v"><b>${g ? `${fmtN(it.gr)} ${u}` : fmtN(it.q, 2)}</b>${g ? '' : `<span class="small muted"> × ${esc(it.food.p)}</span>`}</span>
+      <button class="btn qb" data-act="ingq" data-i="${i}" data-d="1" aria-label="Más">+</button>
+      ${puedeG ? `<button class="link small" data-act="ingmodo" data-i="${i}">${g ? 'en porciones' : `en ${u === 'ml' ? 'ml' : 'gramos'}`}</button>` : ''}</div>`;
+  };
+  const rows = R.ings.map((it, i) => `<div class="fi-w"><div class="fi"><div class="grow tap" data-act="recingedit" data-i="${i}"><b>${esc(it.n)}${it.marca ? ` · ${esc(it.marca)}` : ''}</b><span class="small muted">${Math.round(it.k)} kcal · ${fmtN(it.pr)} g prot.${it.term ? ` · escribiste "${esc(it.term)}"` : ''}</span></div><button class="link danger" data-act="recdel" data-i="${i}" aria-label="Quitar">✕</button></div>${qCtl(it, i)}${altsDe(it, i)}</div>`).join('')
     + ((R.noEnc || []).length ? `<p class="small warn-t">No encontré: ${R.noEnc.map(esc).join(', ')}. Agrégalos con "+ Agregar ingrediente" o créalos.</p>` : '');
   return `<div class="form">
     <label>${R.rapido ? 'Nombre del plato' : 'Nombre de la preparación'}<input id="rnom" value="${esc(R.n)}" placeholder="ej: Completo en marraqueta" autocomplete="off"></label>
-    ${R.rapido ? '<p class="small muted">Revisa cada alimento y su cantidad (toca uno para cambiarla). Se anota como un solo plato.</p>' : ''}
+    ${R.ings.length ? '<p class="small muted">Ajusta la cantidad de cada alimento con <b>−</b> y <b>+</b> (o cámbiala a gramos). Toca el nombre para elegir marca o peso exacto.</p>' : ''}
     <div class="recings">${rows || '<p class="small muted">Agrega los ingredientes con su cantidad o peso, o escríbelos todos juntos en el buscador. Si tiene marca te la pregunto; si no la sabes, uso un valor promedio.</p>'}</div>
     <button class="btn wide" data-act="recfase" data-v="buscar">+ Agregar ingrediente</button>
     ${R.ings.length ? `<div class="rectot"><b>Total: ${Math.round(t.k)} kcal</b><span>${fmtN(t.pr)} g prot. · ${fmtN(t.c, 0)} g carb. · ${fmtN(t.g, 0)} g grasa${t.gr && !t.sinPeso ? ` · ${fmtN(t.gr)} g` : ''}</span></div>` : ''}
@@ -2119,7 +2168,7 @@ function vMas() {
     ${ayudaHTML('')}
     <div class="card small-card"><h3>ℹ️ Importante</h3><p class="small">Esta app orienta y educa con criterios de entrenamiento, nutrición y kinesiología basados en evidencia, pero <b>no reemplaza la evaluación de un médico, nutricionista, kinesiólogo o psicólogo</b>. Ante dudas sobre tu salud, consulta a un profesional.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">v1.20 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">v1.21 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 
@@ -2550,6 +2599,26 @@ const actions = {
     sheet.q_ = '';
     renderSheet();
     toast(`${ings.length} ${ings.length === 1 ? 'alimento' : 'alimentos'} listos: revisa las cantidades`);
+  },
+  ingq(btn) {
+    const it = sheet.rec.ings[+btn.dataset.i], d = +btn.dataset.d;
+    if (!it) return;
+    if (it.modo === 'g') {
+      const g = it.gr || 0, paso = g < 50 || (d < 0 && g <= 50) ? 5 : g < 200 || (d < 0 && g <= 200) ? 10 : 25;
+      it.gr = Math.max(5, Math.round((g + d * paso) / paso) * paso);
+    } else {
+      const q = it.q || 1, paso = q < 1 || (d < 0 && q <= 1) ? 0.25 : 0.5;
+      it.q = Math.max(0.25, Math.round((q + d * paso) * 4) / 4);
+    }
+    recalcIng(it); renderSheet();
+  },
+  ingmodo(btn) {
+    const it = sheet.rec.ings[+btn.dataset.i];
+    if (!it) return;
+    const ug = it.ug || it.food.gp || 100;
+    if (it.modo === 'g') { it.modo = 'u'; it.q = Math.max(0.25, Math.round(((it.gr || ug) / ug) * 4) / 4); }
+    else { it.modo = 'g'; it.gr = Math.round(((it.q || 1) * ug) / 5) * 5 || 5; }
+    recalcIng(it); renderSheet();
   },
   recalt(btn) {
     const i = +btn.dataset.i, it = sheet.rec.ings[i], f = todosAlimentos().find((a) => a.id === btn.dataset.id);
