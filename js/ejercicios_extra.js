@@ -165,7 +165,7 @@ for (const r of EXTRA) {
 }
 
 // variantes de regresión: no se usan al rotar ciclos (sí para sustituir)
-['sentadilla_cajon_alta', 'flexiones_pared', 'plancha_rodillas', 'tijeras_sin_salto'].forEach((id) => { if (META[id]) META[id].reg = true; });
+['sentadilla_cajon_alta', 'flexiones_pared', 'flexiones_rodillas', 'plancha_rodillas', 'tijeras_sin_salto'].forEach((id) => { if (META[id]) META[id].reg = true; });
 
 /* Revisión kinesiológica (v1.15): molestias que descartan ejercicios
    - hombro: elevaciones por sobre 60-90° cargadas irritan el espacio subacromial

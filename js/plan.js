@@ -378,7 +378,11 @@ const RX = {
 
 /* ---------- Plantillas de sesiones ----------
    ej: espacio [nombre, rx | clave RX, rango (0 = 1ª opción), prioridad (1 siempre, 2 normal, 3 solo sesiones largas), opcional] */
-const E = (slot, rx, rank = 0, prio = 2, opt = false) => ({ slot, rx, rank, prio, opt });
+const E = (slot, rx, rank = 0, prio = 2, opt = false) => ({ slot, rx, rank, prio, opt, alt: opt && slot === 'tironV' ? ALT_TIRON('acc') : null });
+// sin tirón vertical disponible (casa sin barra/poleas) se agrega otro remo: mantiene el equilibrio empuje/tirón
+const ALT_TIRON = (rx) => ({ slot: 'tironH', rank: 1, rx });
+// ejercicios principales (multiarticulares): no rotan entre ciclos
+const SLOT_PRINCIPAL = ['pierna', 'bisagra', 'bisagra_m', 'empujeH', 'empujeV', 'tironH', 'tironV'];
 const PLANTILLAS = {
   // ---- Quemar grasa / tonificar / cardio / salud (A-D = plan original) ----
   A: () => ({
@@ -386,7 +390,7 @@ const PLANTILLAS = {
     bloques: [{ tipo: 'calentamiento' },
       E('pierna', [[3, '12-15', 75], [3, '10-12', 75], [4, '8-10', 90]], 0, 1), E('empujeH', [[3, '12-15', 75], [3, '10-12', 75], [4, '8-10', 90]], 0, 1),
       E('tironH', [[3, '12-15', 60], [3, '10-12', 60], [4, '8-10', 75]], 0, 1), E('puente', [[3, '15', 60], [3, '12', 60], [4, '10', 75]], 0, 2),
-      E('empujeV', [[2, '12-15', 60], [3, '10-12', 60], [3, '8-10', 75]], 0, 2), E('tironV', 'comp', 0, 2, true),
+      E('empujeV', [[2, '12-15', 60], [3, '10-12', 60], [3, '8-10', 75]], 0, 2), { ...E('tironV', 'comp', 0, 2, true), alt: ALT_TIRON([[2, '12-15', 60], [3, '10-12', 60], [3, '8-10', 75]]) },
       E('core1', [[3, '20-30 s', 45], [3, '30-40 s', 45], [3, '45 s', 45]], 0, 2), { tipo: 'cardio', kind: 'final' }],
   }),
   B: (p) => ({
@@ -489,19 +493,21 @@ function generarPlan(p, ciclo = 1) {
     return [s, r[1], r[2]];
   });
   // las opciones con '~' son de respaldo: solo se usan si no queda ninguna otra
-  const elegir = (slot, rank, usados) => {
+  // fijo = ejercicio principal: se mantiene entre ciclos para seguir progresando la carga
+  const elegir = (slot, rank, usados, fijo = false, sinRespaldo = false) => {
     const todas = SLOTS[slot] || [];
     const ok = (id) => disponible(id, p, eq) && !usados.has(id);
     const ops = todas.filter((x) => x[0] !== '~').filter(ok);
     if (ops.length) {
       const base = ops[Math.min(rank - rot, ops.length - 1)];
-      if (!rot) return base;
+      if (!rot || fijo) return base;
       // en ciclos nuevos rota entre opciones de igual o mayor nivel (nunca retrocede)
       const lv = (x) => META[x]?.lvl || 0;
       const cands = ops.filter((x) => !META[x]?.reg && lv(x) >= lv(base));
       if (!cands.includes(base)) cands.unshift(base);
       return cands[(cands.indexOf(base) + rot) % cands.length];
     }
+    if (sinRespaldo) return null;
     const fb = todas.filter((x) => x[0] === '~').map((x) => x.slice(1)).filter(ok);
     return fb[0] || null;
   };
@@ -513,12 +519,19 @@ function generarPlan(p, ciclo = 1) {
     for (const b of t.bloques) {
       if (b.slot) {
         if (b.prio > maxPrio) continue;
-        const id = elegir(b.slot, b.rank + rot, usados);
+        let id = elegir(b.slot, b.rank + rot, usados, b.prio === 1 && SLOT_PRINCIPAL.includes(b.slot)), rxB = b.rx;
+        let ss = null;
+        if (!id && b.alt) {
+          id = elegir(b.alt.slot, b.alt.rank + rot, usados, false, true); rxB = b.alt.rx;
+          // superserie antagonista con el empuje anterior: mismo trabajo en menos tiempo
+          const prev = bloques[bloques.length - 1];
+          if (id && prev?.tipo === 'ej' && !prev.ss) { prev.ss = id; ss = prev.id; }
+        }
         if (!id) continue;
         usados.add(id);
         const ex = EJERCICIOS[id];
-        const rx = Array.isArray(b.rx) ? b.rx : RX[ex.tipo === 'tiempo' ? 'tiempo' : b.rx];
-        bloques.push({ tipo: 'ej', id, rx: ajustar(rx) });
+        const rx = Array.isArray(rxB) ? rxB : RX[ex.tipo === 'tiempo' ? 'tiempo' : rxB];
+        bloques.push(ss ? { tipo: 'ej', id, rx: ajustar(rx), ss } : { tipo: 'ej', id, rx: ajustar(rx) });
       } else if (b.tipo === 'circuito') {
         const ejercicios = [];
         for (const s of b.slots) {

@@ -250,7 +250,7 @@ function itemsDe(sid, wi, date) {
       if (b.tipo === 'calentamiento') out.push({ k: 'warm', corto: !!b.corto });
       else if (b.tipo === 'ej') {
         const r = b.rx[wi.phase - 1];
-        if (r) out.push({ k: 'ex', id: b.id, sets: Math.max(1, seriesDesc(r[0]) - aj.menos - (expres && r[0] > 2 ? 1 : 0)), reps: r[1], rest: r[2], enf: b.aj });
+        if (r) out.push({ k: 'ex', id: b.id, sets: Math.max(1, seriesDesc(r[0]) - aj.menos - (expres && r[0] > 2 ? 1 : 0)), reps: r[1], rest: r[2], enf: b.aj, ss: b.ss });
       } else if (b.tipo === 'cardio') {
         const kind = (prec || desc) && b.kind === 'intervalos' ? 'z2' : b.kind;
         const rx = cardioRx(kind, wi.wk, PL.cardio, PL.cardioF);
@@ -753,12 +753,19 @@ function vSesion(date, sid) {
     ${S.perfil?.precaucion ? '<div class="hint warn">🩺 Modo precaución (cuestionario de salud): los intervalos intensos se cambian por cardio suave y el circuito tiene pausas más largas. Consulta a tu médico.</div>' : ''}
     ${!getRutina(sid) && durEst > durMax + 10 && !lg?.expres && !lg?.done ? `<div class="hint warn">⏱ Esta sesión puede durar ~${durEst} min y tú tienes ${durMax}. <button class="link" data-act="expres">Modo exprés</button>: 1 serie menos por ejercicio y la mitad del cardio final (completa el resto con una caminata otro día).</div>` : ''}
     ${lg?.expres ? '<div class="hint">⏱ Modo exprés activo. <button class="link" data-act="expres">Volver a la sesión completa</button></div>' : ''}
-    <div class="hint">Toca <b>✓</b> al terminar cada serie: se guarda y parte el descanso. Si dejas el peso/reps vacíos se usan los sugeridos. En los ejercicios de tiempo usa <b>⏱</b> para cronometrar cuánto resistes. Meta de esfuerzo: termina cada serie con <b>${wi.phase === 1 ? '2-3' : '1-2'} repeticiones en reserva</b>.</div>`;
+    <div class="hint">Toca <b>✓</b> al terminar cada serie: se guarda y parte el descanso. Si dejas el peso/reps vacíos se usan los sugeridos. En los ejercicios de tiempo usa <b>⏱</b> para cronometrar cuánto resistes. Meta de esfuerzo: termina cada serie con <b>${wi.phase === 1 ? '2-3' : '1-2'} repeticiones en reserva</b>. Ritmo: <b>${TEMPO[wi.phase]}</b>.</div>`;
 
   items.forEach((it, idx) => { it.idx = idx; });
   for (const it of items) {
     if (it.k === 'warm') {
       const list = CALENTAMIENTO[it.corto ? 'corto' : 'normal'].map((x) => x.replace('cardio', PLAN().cardio.label.toLowerCase()));
+      // series de aproximación antes del primer ejercicio con peso
+      const prim = !it.corto && items.find((x) => x.k === 'ex' && !x.circ && usaPeso(getEj(x.id)));
+      if (prim) {
+        const lv = ultimaVez(prim.id, date), w = sugerencia(prim.id, prim, lv, lv?.rir).w, st = getEj(prim.id).step || 1;
+        const r = (f) => fmtN(Math.max(st, Math.round((w * f) / st) * st));
+        list.push(`Series de aproximación en <b>${esc(getEj(prim.id).nombre)}</b>: 8 reps con ~50% del peso de trabajo${w ? ` (${r(0.5)} kg)` : ''} y 4 reps con ~75%${w ? ` (${r(0.75)} kg)` : ''}. No cuentan como series.`);
+      }
       html += `<div class="card blk ${lg?.warm ? 'done' : ''}" id="warm" data-blk="${it.idx}"><div class="blk-h"><h3>🔥 Calentamiento</h3><button class="chk ${lg?.warm ? 'on' : ''}" data-act="warm" aria-label="Marcar calentamiento">✓</button></div><ul class="ticks">${list.map((x) => `<li>${x}</li>`).join('')}</ul></div>`;
     } else if (it.k === 'circ') {
       html += `<div class="card circ"><h3>⚡ Circuito · ${it.rondas} rondas</h3><p>Haz los ejercicios <b>seguidos</b>: ${it.trabajo} de trabajo y ${it.pausa} s de pausa entre ejercicios. Descansa <b>${it.entre} s</b> al terminar cada ronda. Anota el peso y las reps (o segundos) que lograste en cada ronda.</p>
@@ -815,6 +822,7 @@ function vSesion(date, sid) {
           <div class="exlinks"><button class="link" data-act="tech" data-id="${it.id}">▶ Ver técnica</button><button class="link" data-act="subopen" data-id="${it.id}" data-orig="${it.orig || it.id}">↔ Cambiar</button></div>
           ${it.autoDolor ? `<p class="small muted">🔴 En lugar de ${esc(getEj(it.orig).nombre)}, por tu molestia de ${ZONAS[it.autoDolor].toLowerCase()}.</p>`
             : it.orig ? `<p class="small muted">En lugar de ${esc(getEj(it.orig).nombre)} · <button class="link small" data-act="subundo" data-orig="${it.orig}">volver al original</button></p>` : ''}
+          ${it.ss ? `<p class="small">🔁 <b>Superserie</b> con ${esc(getEj(it.ss).nombre)}: alterna una serie de cada uno y descansa ${it.rest} s después de cada par.</p>` : ''}
           ${it.avisoDolor ? `<p class="small warn-t">🔴 Carga tu ${ZONAS[it.avisoDolor].toLowerCase()}: hazlo solo si no duele más de 3/10, o cámbialo (↔).</p>` : ''}</div></div>
         <div class="tech" id="tech-${it.id}"></div>
         ${lastTxt ? `<p class="last">${esc(lastTxt)}</p>` : ''}
@@ -825,6 +833,7 @@ function vSesion(date, sid) {
       </div>`;
     }
   }
+  if (items.some((x) => x.k === 'ex')) html += `<div class="card blk calma"><h3>🧘 Vuelta a la calma · 3-5 min</h3><ul class="ticks">${VUELTA_CALMA.map((x) => `<li>${x}</li>`).join('')}</ul><p class="small muted">Estira suave, sin rebotes y sin dolor.${zonasUsuario().includes('rodillas') ? ' Evita los estiramientos de cuádriceps de rodillas en el suelo.' : ''}</p></div>`;
   const rpeTxt = ['', 'Muy fácil', 'Fácil', 'Fácil', 'Moderado', 'Moderado', 'Algo duro', 'Duro', 'Muy duro', 'Durísimo', 'Máximo'];
   html += `<div class="card fin">
     <h3>Cierre de la sesión</h3>
@@ -863,11 +872,12 @@ function vPlan() {
   }).join('');
   return `${header('Plan')}<section class="wrap">
     <div class="weeknav"><button class="btn ghost" data-act="pw" data-d="-1" ${week <= 1 ? 'disabled' : ''}>‹</button><div><b>Semana ${wi.wk}</b>${wi.ciclo > 1 ? ` <span class="small">(ciclo ${wi.ciclo})</span>` : ''}<span class="small muted">${fmt(dateOf(week, 1))} – ${fmt(dateOf(week, 0))}${week === cur ? ' · actual' : ''}</span></div><button class="btn ghost" data-act="pw" data-d="1">›</button></div>
-    ${wi.deload ? '<div class="hint warn">Semana de descarga: 1 serie menos por ejercicio y pesos cómodos. Recupera para volver más fuerte.</div>' : ''}
+    ${wi.deload ? '<div class="hint warn">Semana de descarga: ~40% menos series, mismos pesos y cardio suave en vez de intervalos. Recupera para volver más fuerte.</div>' : ''}
     <div class="card pweek">${dias}</div>
     <p class="small muted">Toca <b>⇄</b> para mover una sesión a otro día o intercambiarla con otra.${S.movidas?.[week] && Object.keys(S.movidas[week]).length ? ` <button class="link small" data-act="resetsemana" data-w="${week}">Restablecer los días de esta semana</button>` : ''}</p>
     <h2 class="sec">Las 3 fases</h2>${fases}
     <a class="card row-link" href="#/enfoque"><span>🎯</span><div class="grow"><b>${enfoqueActivo() ? `Enfoque: ${nombresEnf(enfoqueActivo().areas)}` : 'Elegir un enfoque'}</b><span class="small muted">${enfoqueActivo() ? `Hasta el ${fmt(enfoqueActivo().hasta)}` : 'Prioriza zonas por unas semanas'}</span></div>›</a>
+    <a class="card row-link" href="#/ficha"><span>📋</span><div class="grow"><b>Ficha técnica del plan</b><span class="small muted">Todo tu programa en un documento para que lo revise un profesional</span></div>›</a>
     <a class="card row-link" href="#/series"><span>📊</span><div class="grow"><b>Calculadora de series</b><span class="small muted">Volumen semanal por músculo</span></div>›</a>
     <a class="card row-link" href="#/equipo"><span>🧰</span><div class="grow"><b>¿Tienes equipo nuevo?</b><span class="small muted">Agrégalo y actualiza tu plan</span></div>›</a>
     <a class="card row-link" href="#/rutinas"><span>🧩</span><div class="grow"><b>Rutinas personalizadas</b><span class="small muted">Crea las tuyas y hazlas cualquier día</span></div>›</a>
@@ -1969,6 +1979,7 @@ function vMas() {
     ${S.acceso?.tipo === 'total' ? '<a class="card row-link" href="#/compartir"><span>📤</span><div class="grow"><b>Compartir la app</b><span class="small muted">Envía un link con los días de acceso que tú elijas</span></div>›</a>'
       : S.acceso?.vence ? `<div class="card small-card"><p class="small">🔑 Tu acceso es válido hasta el <b>${fmt(S.acceso.vence, true)}</b>.</p></div>` : ''}
     <a class="card row-link" href="#/enfoque"><span>🎯</span><div class="grow"><b>Enfoques</b><span class="small muted">${enfoqueActivo() ? `Activo: ${nombresEnf(enfoqueActivo().areas)}` : 'Prioriza brazos, tren superior, cardio…'}</span></div>›</a>
+    <a class="card row-link" href="#/ficha"><span>📋</span><div class="grow"><b>Ficha técnica del plan</b><span class="small muted">Para revisión de un kinesiólogo o preparador físico (imprimir o PDF)</span></div>›</a>
     <a class="card row-link" href="#/series"><span>📊</span><div class="grow"><b>Calculadora de series</b><span class="small muted">Series directas e indirectas por músculo</span></div>›</a>
     <a class="card row-link" href="#/timer"><span>⏱️</span><div class="grow"><b>Temporizador</b><span class="small muted">Tabata, intervalos, EMOM y AMRAP con voz</span></div>›</a>
     <a class="card row-link" href="#/recordatorios"><span>⏰</span><div class="grow"><b>Recordatorios</b><span class="small muted">Agrega tus entrenamientos al calendario</span></div>›</a>
@@ -1993,7 +2004,7 @@ function vMas() {
     ${ayudaHTML('')}
     <div class="card small-card"><h3>ℹ️ Importante</h3><p class="small">Esta app orienta y educa con criterios de entrenamiento, nutrición y kinesiología basados en evidencia, pero <b>no reemplaza la evaluación de un médico, nutricionista, kinesiólogo o psicólogo</b>. Ante dudas sobre tu salud, consulta a un profesional.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">v1.15 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">v1.16 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 
@@ -2077,6 +2088,7 @@ function route() {
     case 'compartir': html = vCompartir(); break;
     case 'enfoque': html = vEnfoque(); break;
     case 'series': html = vSeries(); break;
+    case 'ficha': html = vFicha(); break;
     case 'recordatorios': html = vRecordatorios(); break;
     case 'ajustes': html = vAjustes(); break;
     case 'timer':

@@ -506,6 +506,12 @@ const CALENTAMIENTO = {
   normal: ['5 min de cardio suave (puedes conversar sin problema)', '10 círculos de brazos adelante y atrás', '10 bisagras de cadera sin peso', '10 sentadillas sin peso (lentas, a una silla si tienes molestias de rodilla)', '10 puentes de glúteo'],
   corto: ['3 min de cardio muy suave', '10 círculos de brazos', '10 puentes de glúteo'],
 };
+// Vuelta a la calma (3-5 min): baja pulsaciones y devuelve movilidad. Estiramientos suaves, sin rebote ni dolor.
+const VUELTA_CALMA = ['2-3 min de cardio o caminata muy suave', '5 respiraciones lentas: inhala 4 s, exhala 6 s',
+  'Flexor de cadera de pie (un pie adelante, glúteo apretado): 30 s por lado', 'Isquiotibiales: talón sobre un escalón bajo, espalda recta, 30 s por lado',
+  'Pecho en el marco de una puerta: 30 s', 'Pantorrillas contra la pared: 30 s por lado'];
+// Tempo (velocidad de cada repetición) según la fase
+const TEMPO = { 1: 'baja en 3 s, pausa breve y sube controlado', 2: 'baja en 2-3 s y sube con fuerza, sin rebotes', 3: 'baja en 2 s y sube con fuerza, sin rebotes' };
 
 /* Prescripción de cardio según semana, máquina (mod) y objetivo (factor) */
 function cardioRx(kind, semana, mod, factor = 1) {

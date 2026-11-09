@@ -334,7 +334,8 @@ function duracionEstimada(items) {
     else if (it.k === 'circ') s += it.rondas * it.nEj * (rango(it.trabajo)[0] + it.pausa) + Math.max(0, it.rondas - 1) * it.entre;
     else if (it.k === 'ex' && !it.circ) {
       const [, hi] = rango(it.reps), trab = /s\s*$/.test(String(it.reps)) ? hi : Math.max(20, hi * 3.5);
-      s += it.sets * trab + Math.max(0, it.sets - 1) * (it.rest || 60) + 75;
+      // en superserie el descanso se comparte entre los dos ejercicios
+      s += it.sets * trab + Math.max(0, it.sets - 1) * (it.rest || 60) * (it.ss ? 0.5 : 1) + 75;
     }
   }
   return Math.round(s / 60 / 5) * 5;

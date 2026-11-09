@@ -715,3 +715,24 @@ details.banderas { margin: 6px 0 12px; }
 details.banderas summary { cursor: pointer; padding: 6px 0; }
 details.banderas .chkl { font-size: .85rem; color: var(--tx); margin: 6px 0; }
 .bwok { padding: 10px 14px; }
+
+/* ---------- v1.16: ficha técnica y vuelta a la calma ---------- */
+.card.calma h3 { margin-bottom: .3rem; }
+.ficha .fcard h2 { font-size: 1.15rem; margin: 0 0 .3rem; }
+.ftab { width: 100%; border-collapse: collapse; font-size: .8rem; margin-top: .4rem; }
+.ftab th, .ftab td { border-bottom: 1px solid var(--line, rgba(127,127,127,.25)); padding: .35rem .3rem; text-align: left; vertical-align: top; }
+.ftab th { font-weight: 600; opacity: .8; }
+.ftab.kv td:first-child { width: 38%; opacity: .75; }
+.ficha ul ul { margin: .2rem 0 0; }
+.ficha .lineas { height: 3.2rem; border-bottom: 1px solid currentColor; opacity: .35; margin-bottom: .6rem;
+  background: repeating-linear-gradient(transparent 0 1.55rem, currentColor 1.55rem calc(1.55rem + 1px)); }
+@page { margin: 12mm 10mm; }
+@media print {
+  #nav, header.top, .noprint, #toast { display: none !important; }
+  html, body, #main, .wrap, section { background: #fff !important; color: #000 !important; }
+  :root, :root[data-theme] { --bg: #fff; color-scheme: light !important; background: #fff !important; }
+  .wrap { max-width: none; padding: 0; }
+  .card { box-shadow: none !important; border: 1px solid #bbb !important; background: #fff !important; color: #000 !important; break-inside: avoid; }
+  .ftab { font-size: 9pt; }
+  .muted { color: #444 !important; }
+}
