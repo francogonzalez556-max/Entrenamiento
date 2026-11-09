@@ -295,11 +295,11 @@ const ICO = {
 /* ---------- Opciones del perfil ---------- */
 const PERFIL_OPC = {
   objetivos: [
-    ['bajar', '🔥', 'Bajar de peso', 'Quemar grasa con fuerza + cardio y déficit de calorías'],
+    ['bajar', '🔥', 'Bajar de peso', 'Bajar grasa de forma gradual con fuerza, cardio y un déficit moderado'],
     ['musculo', '💪', 'Ganar músculo', 'Más fuerza y masa muscular, con leve superávit'],
     ['tonificar', '⚡', 'Tonificar / mantener', 'Mejorar la forma sin cambiar mucho el peso'],
     ['cardio', '🫀', 'Mejorar el cardio', 'Más resistencia y capacidad aeróbica'],
-    ['salud', '🌱', 'Salud general', 'Moverse, sentirse bien y prevenir lesiones'],
+    ['salud', '🌱', 'Salud general', 'Moverse, sentirse bien y reducir el riesgo de lesiones'],
   ],
   metabolismo: [
     ['lento', '🐢', 'Lento', 'Subo de peso con facilidad y me cuesta bajar'],
@@ -351,7 +351,7 @@ const SLOTS = {
   puente: ['puente'],
   zancada: ['zancada'],
   empujeH: ['press_banca', 'press_suelo', 'flexiones', 'flexiones_inclinadas', 'press_banca_mancuernas', 'press_inclinado_mancuernas', 'press_pecho_maquina', 'flexiones_trx', 'press_pecho_banda', 'flexiones_rodillas'],
-  empujeV: ['press_militar', 'press_militar_pie', 'press_hombro_maquina', 'press_arnold', 'press_hombro_banda', '~elevaciones_laterales'],
+  empujeV: ['press_militar', 'press_militar_pie', 'press_hombro_maquina', 'press_arnold', 'press_hombro_banda', '~elevaciones_laterales', '~face_pull', '~rotacion_externa_banda'],
   tironH: ['remo_polea', 'remo_mancuerna', 'remo_barra', 'remo_trx', 'remo_pecho_apoyado', 'remo_maquina', 'remo_invertido', 'remo_banda_pie', 'remo_polea_unilateral', '~superman'],
   tironV: ['dominadas', 'jalon', 'dominadas_supinas', 'jalon_cerrado', 'dominadas_asistidas', 'jalon_banda'],
   hombroL: ['elevaciones_laterales', 'face_pull', 'pajaros', 'elevacion_lateral_polea', 'elevaciones_frontales'],

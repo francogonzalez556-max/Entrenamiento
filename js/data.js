@@ -537,8 +537,8 @@ function cardioRx(kind, semana, mod, factor = 1) {
 /* ---------- Alimentación ---------- */
 const CONSEJOS_COMIDA = [
   ['Método del plato', 'En almuerzo: ½ plato de verduras, ¼ proteína (pollo, pescado, carne magra, huevo, legumbres) y ¼ carbohidrato (arroz, papa, fideos, pan).'],
-  ['Proteína en cada comida', 'Es lo que más te ayuda a no perder músculo y a tener menos hambre. Intenta 40-50 g en desayuno, almuerzo y once.'],
-  ['Agua', 'Apunta a 3 litros al día (más en días de entrenamiento). Antes de cada comida, 1 vaso de agua.'],
+  ['Proteína en cada comida', 'Es lo que más te ayuda a no perder músculo y a tener menos hambre. Intenta 25-40 g en desayuno, almuerzo y once.'],
+  ['Agua', 'Apunta a ~30-35 ml por kilo al día (más en días de entrenamiento). Antes de cada comida, 1 vaso de agua.'],
   ['Bebidas y alcohol', 'Bebidas solo zero. El alcohol aporta muchas calorías: máximo 1-2 veces por semana y en poca cantidad.'],
   ['Pan', 'La marraqueta completa son ~270 kcal. Prefiere integral y 1 unidad por comida como máximo.'],
   ['Regla 80/20', 'Si cumples el plan el 80% del tiempo, un antojo planificado (ej. el fin de semana) no arruina el progreso.'],

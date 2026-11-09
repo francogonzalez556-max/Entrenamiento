@@ -684,3 +684,34 @@ body { font-size: 1rem; }
 .chips.marcas { flex-wrap: wrap; gap: 6px; }
 .chips.marcas .tab { flex: 0 0 auto; padding: 8px 12px; font-family: inherit; font-weight: 600; text-transform: none; letter-spacing: 0; font-size: .85rem; }
 #rprev { font-size: 1.25rem; }
+
+/* ---------- v1.15: salud (alertas, dolor por zona, bienestar, calidad, agua) ---------- */
+/* sin rojo por "pasarse": ámbar neutro; las sesiones perdidas en gris */
+.pbar i.over, .card.accent .pbar i.over { background: var(--warn); }
+.pbar i.bajo, .card.accent .pbar i.bajo { background: var(--warn); }
+.grow-row i.miss { background: color-mix(in srgb, var(--mut) 22%, var(--bg2)); }
+.warn-t { color: var(--warn); }
+.card.alerta { border-left: 4px solid var(--warn); }
+.card.alerta.alto { border-left-color: #ff8a00; background: color-mix(in srgb, #ff8a00 9%, var(--card)); }
+.card.alerta.medio { border-left-color: var(--warn); }
+.card.alerta.bajo { border-left-color: var(--ice); }
+.card.alerta b { display: block; margin-bottom: 4px; }
+.card.ayuda { border-left: 4px solid var(--ice); }
+.card.ayuda a { color: inherit; text-decoration: underline; }
+.qrow { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: .9rem; }
+.qrow:last-of-type { border-bottom: 0; }
+.vasos { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 10px; }
+.vasos i { width: 18px; height: 26px; border-radius: 3px 3px 7px 7px; border: 2px solid var(--ice); opacity: .45; }
+.vasos i.on { background: var(--ice); opacity: 1; }
+.bwrow { margin: 8px 0; }
+.bwrow .lbl { display: block; font-size: .8rem; color: var(--mut); margin-bottom: 4px; }
+.bwrow .chips, .rirrow .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.bwrow .tab, .rirrow .tab { flex: 0 0 auto; padding: 7px 11px; font-size: .85rem; text-transform: none; letter-spacing: 0; }
+.rirrow { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.sema { font-size: .75rem; font-weight: 600; margin-left: 6px; }
+.stats.inner { margin: 4px 0 12px; }
+.stats.inner div { background: var(--bg2); }
+details.banderas { margin: 6px 0 12px; }
+details.banderas summary { cursor: pointer; padding: 6px 0; }
+details.banderas .chkl { font-size: .85rem; color: var(--tx); margin: 6px 0; }
+.bwok { padding: 10px 14px; }

@@ -167,6 +167,35 @@ for (const r of EXTRA) {
 // variantes de regresión: no se usan al rotar ciclos (sí para sustituir)
 ['sentadilla_cajon_alta', 'flexiones_pared', 'plancha_rodillas', 'tijeras_sin_salto'].forEach((id) => { if (META[id]) META[id].reg = true; });
 
+/* Revisión kinesiológica (v1.15): molestias que descartan ejercicios
+   - hombro: elevaciones por sobre 60-90° cargadas irritan el espacio subacromial
+   - espalda baja: flexión repetida (crunch) y extensión con carga en el suelo (superman)
+   - rodilla: remo ergómetro = flexión profunda repetida de rodilla bajo carga */
+const NO_EXTRA = {
+  elevaciones_laterales: ['hombros'], elevaciones_frontales: ['hombros'], elevacion_lateral_polea: ['hombros'],
+  crunch: ['espalda'], crunch_bicicleta: ['espalda'], superman: ['espalda'], remo_ergometro: ['rodillas'],
+};
+for (const [id, zs] of Object.entries(NO_EXTRA)) if (META[id]) META[id].no = [...new Set([...(META[id].no || []), ...zs])];
+
+/* Notas para rodillas sensibles en los ejercicios agregados (solo si no tienen una) */
+const NOTA_RODILLA = {
+  sentadilla_cajon_alta: 'Buena opción para rodillas sensibles: baja solo hasta donde no duela.',
+  sentadilla_banda: 'Usa una silla detrás como tope y baja solo en el rango sin dolor.',
+  sentadilla_espanola: 'Isométrico que suele aliviar el dolor de rótula: mantén con dolor de 3/10 como máximo.',
+  sentadilla_pared_peso: 'Ajusta la profundidad: más arriba = menos carga en la rótula.',
+  extension_terminal_rodilla: 'Fortalece el cuádriceps cerca de la extensión, con poca carga en la rótula: ideal para rodillas sensibles.',
+  equilibrio_una_pierna: 'Rodilla levemente flexionada, sin bloquearla ni dejar que se vaya hacia adentro.',
+  prensa_unilateral: 'Baja solo hasta donde la cadera no se despegue y sin dolor.',
+  patada_gluteo: 'Apoya las rodillas sobre un cojín doblado; si molesta, hazla de pie con banda.',
+  plancha_rodillas: 'Apoya las rodillas sobre un cojín doblado.',
+  flexiones_rodillas: 'Apoya las rodillas sobre un cojín doblado; si molesta, usa flexiones inclinadas en una mesa.',
+  puente_isquios: 'Sin carga sobre la rótula: buena opción para rodillas sensibles.',
+  puente_una_pierna: 'Sin carga sobre la rótula: buena opción para rodillas sensibles.',
+  peso_muerto_kb: 'Rodillas suaves; el movimiento es de cadera, no de rodilla.',
+  remo_ergometro: 'Flexiona mucho la rodilla en cada palada: no recomendado con molestias de rodilla.',
+};
+for (const [id, t] of Object.entries(NOTA_RODILLA)) if (EJERCICIOS[id] && !EJERCICIOS[id].rodilla) EJERCICIOS[id].rodilla = t;
+
 /* ---------- Alternativas (sustituir) y variantes más fáciles / más difíciles ---------- */
 function alternativas(id, p) {
   const pat = PATRON[id];
