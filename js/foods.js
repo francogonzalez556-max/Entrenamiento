@@ -110,7 +110,7 @@ const ALIMENTOS_RAW = [
   ['Porotos verdes', '1 taza', 44, 2.4, 10, 0.4, 'Verduras y aderezos'],
   ['Zapallo cocido', '1 taza', 50, 1.8, 12, 0.2, 'Verduras y aderezos'],
   ['Sopa / crema de verduras', '1 plato', 150, 4, 20, 6, 'Verduras y aderezos'],
-  ['Aceite (oliva o vegetal)', '1 cucharada (10 ml)', 88, 0, 0, 10, 'Verduras y aderezos'],
+  ['Aceite (oliva o vegetal)', '1 cucharada (15 ml)', 120, 0, 0, 13.5, 'Verduras y aderezos'],
   ['Mayonesa', '1 cucharada (15 g)', 100, 0.2, 0.1, 11, 'Verduras y aderezos'],
   ['Mayonesa light', '1 cucharada (15 g)', 45, 0, 1.5, 4.5, 'Verduras y aderezos'],
   ['Ketchup', '1 cucharada', 17, 0.2, 4.5, 0, 'Verduras y aderezos'],
@@ -359,7 +359,7 @@ ALIMENTOS_RAW.push(
   ['Ensalada de apio con palta', '1 plato (200 g, sin aceite)', 175, 2.5, 10, 15, 'Ensaladas'],
 
   // Salsas y aderezos
-  ['Aceite', '1 cucharadita (5 ml)', 44, 0, 0, 5, 'Salsas y aderezos'],
+  ['Aceite', '1 cucharadita (5 ml)', 40, 0, 0, 4.5, 'Salsas y aderezos'],
   ['Vinagre', '1 cucharada (15 ml)', 3, 0, 0.1, 0, 'Salsas y aderezos'],
   ['Vinagreta (aceite y vinagre)', '1 cucharada (15 g)', 70, 0, 0.5, 7.5, 'Salsas y aderezos'],
   ['Aderezo César', '1 cucharada (15 g)', 80, 0.3, 0.5, 8.5, 'Salsas y aderezos'],

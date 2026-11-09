@@ -17,7 +17,7 @@ const ayudaHTML = (intro) => `<div class="card ayuda"><h3>🆘 ¿Lo estás pasan
   <p class="small muted">Hablar con alguien de confianza y con un profesional de salud mental ayuda. No estás solo/a.</p></div>`;
 
 /* ---------- Clasificación aproximada de alimentos (por nombre y categoría) ---------- */
-const RX_ALCOHOL = /cerveza|vino|piscola|pisco|\bron\b|whisky|vodka|chela|terremoto|espumante|champa|michelada|sour|coctel|\bgin\b|tequila|licor|navegado|cola de mono|fernet|jagger/;
+const RX_ALCOHOL = /cerveza|vino|piscola|pisco|\bron\b|whisky|vodka|chela|terremoto|espumante|champa|michelada|sour|coctel|\bgin\b|tequila|licor|navegado|cola de mono|fernet|jagger|chicha|mojito|destilado/;
 const RX_PESCADO = /merluza|reineta|salmon|atun|jurel|pescado|congrio|sardina|corvina|marisco|chorito|macha|camaron|ceviche|pejerrey|trucha|caldillo|almeja|loco|ostion|surimi/;
 const RX_LEGUMBRE = /poroto|lenteja|garbanzo|arveja|hummus|soya|tofu/;
 const RX_NO_VERDURA = /mayo|aceite|aderezo|salsa|ketchup|mostaza|vinagreta|palta|crema|manjar|mermelada/;

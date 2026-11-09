@@ -48,7 +48,22 @@ const Fig = (() => {
     }
     return a;
   }
-  const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+  // smootherstep: arranca y frena sin tirones (aceleración cero en los extremos)
+  const ease = (t) => t * t * t * (t * (t * 6 - 15) + 10);
+  // Catmull-Rom: curva suave que pasa por todas las poses (sin quiebres entre cuadros)
+  function cr(a, b, c, d, t) {
+    if (typeof b === 'number') {
+      const A = typeof a === 'number' ? a : b, C = typeof c === 'number' ? c : b, D = typeof d === 'number' ? d : C;
+      return 0.5 * (2 * b + (-A + C) * t + (2 * A - 5 * b + 4 * C - D) * t * t + (-A + 3 * b - 3 * C + D) * t * t * t);
+    }
+    if (Array.isArray(b)) return b.map((v, i) => cr(a?.[i], v, c?.[i], d?.[i], t));
+    if (b && typeof b === 'object') {
+      const o = {};
+      for (const k in b) o[k] = c && k in c ? cr(a?.[k], b[k], c[k], d?.[k], t) : b[k];
+      return o;
+    }
+    return b;
+  }
 
   function timeline(anim) {
     const frames = anim.frames.map((f) => merge(anim.base || {}, f));
@@ -65,7 +80,9 @@ const Fig = (() => {
       t -= tl.holds[i];
       if (t < tl.dur) {
         const k = t / tl.dur;
-        return lerp(tl.frames[i], tl.frames[(i + 1) % n], tl.linear ? k : ease(k));
+        if (!tl.linear) return lerp(tl.frames[i], tl.frames[(i + 1) % n], ease(k));
+        const F = tl.frames;
+        return cr(F[(i - 1 + n) % n], F[i], F[(i + 1) % n], F[(i + 2) % n], k);
       }
       t -= tl.dur;
     }
@@ -273,8 +290,9 @@ const Fig = (() => {
     return () => cancelAnimationFrame(raf);
   }
 
-  function still(anim, frame = 1) {
+  function still(anim, frame = 1, musc) {
     if (!anim) return '';
+    if (typeof Fig3D !== 'undefined' && Fig3D.mini) return Fig3D.mini(anim, frame, musc);
     const tl = tlOf(anim);
     const f = tl.frames[Math.min(frame, tl.frames.length - 1)];
     return `<svg viewBox="${VB}" class="fig" aria-hidden="true">${draw(anim, f)}</svg>`;

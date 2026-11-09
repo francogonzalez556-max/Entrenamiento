@@ -67,6 +67,7 @@ const Fig3D = (() => {
       };
       B.map = { handL: N.ha, handR: F.ha, hL: N.ha, hR: F.ha, handsMid: v3(N.ha, v3(F.ha, N.ha, -1), 0.5), shL: N.sh, shR: F.sh, head, cx: px, y: J.y, ry: J.ry };
       B.P = (x, y, z = 0) => [z, y, -(x - px)];
+      Object.assign(B, { hipC: P([J.cx, J.y]), shC: P([J.cx, J.y - 48]), lat: [0, 0, 1], front: [1, 0, 0] });
       return B;
     }
     const J = sideJoints(p);
@@ -90,6 +91,8 @@ const Fig3D = (() => {
     B.map = { hip: P(J.hip), sh: P(J.sh), head, kn: N.kn, an: P(J.an), kf: F.kn, af: F.an, handN: N.ha, handF: F.ha, hn: N.ha, hf: F.ha, en: N.el, ef: F.el };
     B.P = (x, y, z = 0) => P([x, y], z);
     B.bilateral = !(p.arm && p.arm.f);
+    const af = rad(p.torso + 90);
+    Object.assign(B, { hipC: P(J.hip), shC: P(J.sh), lat: latY ? [0, -1, 0] : [0, 0, 1], front: latY ? [0, 0, 1] : [Math.cos(af) * face, Math.sin(af) * face, 0] });
     return B;
   }
 
@@ -237,19 +240,58 @@ const Fig3D = (() => {
     return { bg, fg };
   }
 
-  function escena(anim, pose, px) {
+  /* músculos por zona del cuerpo (para resaltar los que trabaja el ejercicio) */
+  const MZ = {
+    muslo: ['cuad', 'isquios', 'aductores'], pierna: ['pantorrillas'], gluteo: ['gluteos'], torsoS: ['pecho', 'dorsal', 'media'],
+    torsoI: ['abdomen', 'lumbar'], hombro: ['h_ant', 'h_lat', 'h_post'], brazo: ['biceps', 'triceps'], antebrazo: ['antebrazo'],
+  };
+  const claseM = (base, zona, musc) => {
+    if (!musc) return base;
+    if (MZ[zona].some((m) => musc.d.includes(m))) return base + ' fig-md';
+    if (MZ[zona].some((m) => musc.i.includes(m))) return base + ' fig-mi';
+    return base;
+  };
+  const L3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  const tubo = (pts, r, cls) => ({ k: 'tube', pts, r, cls });
+  const bola = (c, r, cls) => ({ k: 'ball', c, r, cls });
+  const grupo = (parts) => ({ t: 'g', parts });
+
+  function escena(anim, pose, px, musc) {
     const B = cuerpo(anim, pose, px);
     const { bg, fg } = props(anim, B, pose);
     const body = [];
-    const extremidad = (S, cls) => {
-      body.push(seg(S.hip, S.kn, 8, cls), seg(S.kn, S.an, 7.5, cls), seg(S.an, S.toe, 6.5, cls));
-      body.push(seg(S.sh, S.el, 7.5, cls), seg(S.el, S.ha, 7, cls));
+    // extremidades con volumen: muslo y pantorrilla más gruesos arriba, antebrazo más fino en la muñeca
+    const extremidad = (S, lado) => {
+      const b = lado === 'n' ? 'fb-n' : 'fb-f';
+      const talon = v3(S.an, v3(S.an, S.toe, -1), 0.32);
+      body.push(grupo([
+        tubo([S.hip, L3(S.hip, S.kn, 0.4), S.kn], [9.4, 8.4, 6.1], claseM(b, 'muslo', musc)),
+        tubo([S.kn, L3(S.kn, S.an, 0.3), S.an], [6.0, 6.8, 4.1], claseM(b, 'pierna', musc)),
+        tubo([talon, S.toe], [4.4, 3.4], 'fig-shoe' + (lado === 'f' ? ' far' : '')),
+      ]));
+      body.push(grupo([
+        bola(S.sh, 7.1, claseM(b, 'hombro', musc)),
+        tubo([S.sh, L3(S.sh, S.el, 0.45), S.el], [6.2, 5.9, 4.6], claseM(b, 'brazo', musc)),
+        tubo([S.el, L3(S.el, S.ha, 0.3), S.ha], [4.7, 4.9, 3.4], claseM(b, 'antebrazo', musc)),
+        bola(S.ha, 4.1, b),
+      ]));
     };
-    extremidad(B.F, 'fig-f');
-    body.push(poly(B.torso, 'fig-body3', 10));
-    body.push(seg(B.neck[0], B.neck[1], 6, 'fig-n'));
-    body.push(ball(B.head, L.head, 'fig-head'), ball(B.nose, 3.2, 'fig-nose'));
-    extremidad(B.N, 'fig-n');
+    extremidad(B.F, 'f');
+    // torso: hombros, pecho, cintura y cadera (dos volúmenes para marcar la cintura)
+    const nivel = (t, w, fr, bk) => {
+      const c = L3(B.hipC, B.shC, t), out = [];
+      for (const sz of [-1, 1]) for (const [k, d] of [[1, fr], [0.7, fr * 1.15], [1, bk], [0.7, bk * 1.1]]) out.push(v3(v3(c, B.lat, sz * w * k), B.front, d));
+      return out;
+    };
+    const sup = [...nivel(1, 14.5, 5.5, -6.5), ...nivel(0.8, 16, 10, -9), ...nivel(0.52, 13.5, 8.5, -7.5)];
+    const inf = [...nivel(0.52, 13.5, 8.5, -7.5), ...nivel(0.28, 12.5, 8.5, -7), ...nivel(0, 13.5, 6.5, -9)];
+    body.push(grupo([{ k: 'hull', pts: inf, cls: claseM('fb-n', 'torsoI', musc) }, { k: 'hull', pts: sup, cls: claseM('fb-n', 'torsoS', musc) }]));
+    // glúteos (detrás de la cadera)
+    for (const sz of [-1, 1]) body.push(grupo([bola(v3(v3(L3(B.hipC, B.shC, 0.04), B.lat, sz * 6.5), B.front, -5.5), 7.6, claseM('fb-n', 'gluteo', musc))]));
+    const cuello = L3(B.shC, B.head, 0.15);
+    body.push(grupo([tubo([cuello, L3(B.shC, B.head, 0.6)], [5.4, 4.8], 'fb-n'), bola(B.head, L.head + 0.6, 'fb-n')]));
+    body.push(ball(B.nose, 3.2, 'fig-nose'));
+    extremidad(B.N, 'n');
     return { bg, fg: body.concat(fg), pelvis: B.pelvis };
   }
 
@@ -269,7 +311,19 @@ const Fig3D = (() => {
     for (let i = p.length - 1; i >= 0; i--) { const q = p[i]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop(); up.push(q); }
     return lo.slice(0, -1).concat(up.slice(0, -1));
   }
-  const puntos = (it) => (it.t === 's' ? [it.a, it.b] : it.t === 'c' ? [it.c] : it.t === 'b' ? it.c : it.pts);
+  const puntos = (it) => (it.t === 's' ? [it.a, it.b] : it.t === 'c' ? [it.c] : it.t === 'b' ? it.c : it.t === 'g' ? it.parts.flatMap((q) => (q.k === 'ball' ? [q.c] : q.pts)) : it.pts);
+  // tubo 2D: polígono con el grosor de cada punto + círculos en los extremos (redondeados)
+  function tuboSVG(sp, rr) {
+    const n = sp.length, izq = [], der = [];
+    for (let i = 0; i < n; i++) {
+      const a = sp[Math.max(0, i - 1)], b = sp[Math.min(n - 1, i + 1)];
+      let dx = b[0] - a[0], dy = b[1] - a[1];
+      const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
+      izq.push([sp[i][0] - dy * rr[i], sp[i][1] + dx * rr[i]]); der.push([sp[i][0] + dy * rr[i], sp[i][1] - dx * rr[i]]);
+    }
+    const pts = izq.concat(der.reverse()).map((q) => `${f1(q[0])} ${f1(q[1])}`).join(' L');
+    return `<path d="M${pts} Z"/><circle cx="${f1(sp[0][0])}" cy="${f1(sp[0][1])}" r="${f1(rr[0])}"/><circle cx="${f1(sp[n - 1][0])}" cy="${f1(sp[n - 1][1])}" r="${f1(rr[n - 1])}"/>`;
+  }
 
   function render(it, pr, k, T) {
     const tp = (q) => { const s = pr(q); return [T[0] + s[0] * k, T[1] + (s[1] - G) * k]; };
@@ -289,6 +343,24 @@ const Fig3D = (() => {
         const pts = it.hull ? hull(it.pts.map(tp)) : it.pts.map(tp);
         return `<path d="M${ps(pts)} Z" class="${it.cls}" stroke-width="${f1(it.w * k)}" stroke-linejoin="round"/>`;
       }
+      case 'g': {
+        // primero el contorno de todas las piezas (color de fondo) y luego el relleno: sin costuras internas
+        const O = 1.5, rd = 2.2 * k;
+        let ol = '', fl = '';
+        for (const q of it.parts) {
+          if (q.k === 'tube') {
+            const sp = q.pts.map(tp), rr = q.r.map((r) => r * k);
+            ol += tuboSVG(sp, rr.map((r) => r + O)); fl += `<g class="${q.cls}">${tuboSVG(sp, rr)}</g>`;
+          } else if (q.k === 'ball') {
+            const c = tp(q.c);
+            ol += `<circle cx="${f1(c[0])}" cy="${f1(c[1])}" r="${f1(q.r * k + O)}"/>`; fl += `<circle class="${q.cls}" cx="${f1(c[0])}" cy="${f1(c[1])}" r="${f1(q.r * k)}"/>`;
+          } else {
+            const d = `M${ps(hull(q.pts.map(tp)))} Z`;
+            ol += `<path d="${d}" stroke-width="${f1(rd * 2 + O * 2)}" stroke-linejoin="round"/>`; fl += `<path class="${q.cls}" d="${d}" stroke-width="${f1(rd * 2)}" stroke-linejoin="round"/>`;
+          }
+        }
+        return `<g class="fig-olf">${ol}</g>${fl}`;
+      }
       case 'b': {
         const h = hull(it.c.map(tp));
         return `<path d="M${ps(h)} Z" class="${it.cls} fig-boxe"/><path d="M${ps(it.top.map(tp))} Z" class="fig-ptop"/>`;
@@ -299,11 +371,11 @@ const Fig3D = (() => {
   const prof = (it, pr) => { const p = puntos(it); let s = 0; for (const q of p) s += pr(q)[2]; return s / p.length; };
 
   /* encuadre: ajusta escala y centro para que todo el movimiento quepa */
-  function encuadre(anim, tl, px, pr) {
+  function encuadre(anim, tl, px, pr, musc) {
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
     const fr = tl.frames.length > 4 ? tl.frames.filter((_, i) => i % 2 === 0) : tl.frames;
     for (const f of fr) {
-      const E = escena(anim, f, px);
+      const E = escena(anim, f, px, musc);
       for (const it of E.bg.concat(E.fg)) for (const q of puntos(it)) {
         const s = pr(q);
         x0 = Math.min(x0, s[0]); x1 = Math.max(x1, s[0]); y0 = Math.min(y0, s[1]); y1 = Math.max(y1, s[1]);
@@ -316,12 +388,12 @@ const Fig3D = (() => {
     return { k, T };
   }
 
-  function dibujar(anim, pose, px, th, ph, fit) {
+  function dibujar(anim, pose, px, th, ph, fit, musc, sinPiso) {
     const pr = camara(th, ph);
     const { k, T } = fit;
-    const E = escena(anim, pose, px);
+    const E = escena(anim, pose, px, musc);
     let s = '';
-    if (!anim.noFloor) {
+    if (!anim.noFloor && !sinPiso) {
       const c = E.pelvis, Y = G + 3;
       const fl = [];
       const piso = [[-110, -48], [110, -48], [110, 48], [-110, 48]].map(([x, z]) => [x, Y, z]);
@@ -352,7 +424,7 @@ const Fig3D = (() => {
   }
 
   /* monta la figura 3D en un contenedor; devuelve la función para detenerla */
-  function mount(box, anim) {
+  function mount(box, anim, musc) {
     if (!box || !anim) return () => {};
     box.innerHTML = `<svg class="fig big a3d-svg" viewBox="${VB}" aria-label="Animación del ejercicio"></svg>${controlesHTML()}`;
     const svg = box.querySelector('svg');
@@ -405,7 +477,7 @@ const Fig3D = (() => {
         if (Math.abs(meta.th - st.th) < 0.2 && Math.abs(meta.ph - st.ph) < 0.2) { st.th = meta.th; st.ph = meta.ph; meta = null; }
       }
       if (st.th !== lastTh || st.ph !== lastPh) { refit(); lastTh = st.th; lastPh = st.ph; }
-      svg.innerHTML = dibujar(anim, poseAt(tl, st.t), px, st.th, st.ph, st.fit);
+      svg.innerHTML = dibujar(anim, poseAt(tl, st.t), px, st.th, st.ph, st.fit, musc);
       raf = requestAnimationFrame(step);
     };
     raf = requestAnimationFrame(step);
@@ -421,5 +493,15 @@ const Fig3D = (() => {
     return `<svg viewBox="${VB}" class="fig">${dibujar(anim, f, px, v.th, v.ph, fit)}</svg>`;
   }
 
-  return { mount, still, VISTAS };
+  /* miniatura: vista lateral levemente girada para dar volumen */
+  function mini(anim, frame = 1, musc) {
+    if (!anim) return '';
+    const tl = tlOf(anim), px = pivote(anim);
+    const th = anim.mode === 'front' ? 68 : 20, ph = 9;
+    const fit = encuadre(anim, tl, px, camara(th, ph));
+    const f = tl.frames[Math.min(frame, tl.frames.length - 1)];
+    return `<svg viewBox="${VB}" class="fig" aria-hidden="true">${dibujar(anim, f, px, th, ph, fit, musc, true)}</svg>`;
+  }
+
+  return { mount, still, mini, VISTAS };
 })();
