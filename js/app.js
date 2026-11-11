@@ -1065,13 +1065,13 @@ function recientes() {
   return out;
 }
 function buscar(q) {
-  const w = normal(q).split(/\s+/).filter(Boolean);
+  const w = normal(q).replace(/['’]/g, '').split(/\s+/).filter(Boolean);
   if (!w.length) return null;
   // cada palabra acepta también sus sinónimos (ej. "cafe" → capuchino, latte)
   const alts = w.map((x) => [x, ...(SINONIMOS[x] || []).map(normal)]);
   const qn = w.join(' ');
   return todosAlimentos()
-    .map((a) => ({ a, t: normal(a.n + ' ' + a.cat), n: normal(a.n) }))
+    .map((a) => ({ a, t: normal(a.n + ' ' + a.cat + ' ' + (a.kw || '')).replace(/['’]/g, ''), n: normal(a.n) }))
     .filter(({ t }) => alts.every((opts) => opts.some((o) => t.includes(o))))
     .sort((x, y) => (y.n.startsWith(qn) - x.n.startsWith(qn)) || (y.n.includes(qn) - x.n.includes(qn)))
     .slice(0, 60)
@@ -1249,7 +1249,7 @@ function estimarCasera(txt) {
   partesTexto(txt).forEach((t) => {
     if (CONDIMENTO_RX.test(t) && !GRASA_RX.test(t)) return;
     const todos = matchAlimento(t).filter((f) => f.gp && !f.rec);
-    const food = todos.find((f) => !['Platos preparados', 'Snacks y dulces', 'Bebidas'].includes(f.cat)) || todos[0];
+    const food = todos.find((f) => !['Platos preparados', 'Snacks y dulces', 'Bebidas', 'Comida rápida'].includes(f.cat)) || todos.find((f) => f.cat !== 'Comida rápida');
     if (!food) { faltan.push(t); return; }
     const grasa = GRASA_RX.test(t);
     let w = grasa ? 0 : AROMA_RX.test(t) && items.length ? 1.2 : PESO_CAT[food.cat] ?? 1;
@@ -1470,6 +1470,7 @@ function sheetHTML() {
         <p class="prev" id="fprev">${prevTxt(f, q)}</p>`;
     const sinGr = !f.gp && !f.rec && S.propios.some((x) => x.id === f.id);
     body = `<div class="pick"><b class="pick-n">${esc(f.n)}</b><span class="muted small">Porción: ${esc(f.p)} = ${f.k} kcal${f.gp ? ` · ${fmtN(f.gp)} ${u}` : ''}</span>
+      ${f.fuente ? `<span class="small muted fuente-fr">${/^estimado/.test(f.fuente) ? '≈ Valor estimado: la cadena no publica su información nutricional' : /Chile/.test(f.fuente) ? '✓ Dato oficial de la cadena en Chile' : /USDA/.test(f.fuente) ? 'Dato del USDA (análisis de laboratorio, EE.UU.)' : `Dato oficial de la cadena (${esc(f.fuente.replace('oficial ', ''))}); en Chile puede variar`}</span>` : ''}
       ${sinGr ? `<div class="gpfix"><span class="small">⚖️ Para anotarlo en gramos, indica cuánto pesa 1 porción (${esc(f.p)}):</span><div class="gpfix-r"><input id="gpfix" type="text" inputmode="decimal" placeholder="ej: 250"><span class="qu">${u}</span><button class="btn small-btn" data-act="gpfix">Guardar</button></div></div>` : ''}
       ${modo}${ctrl}
       <button class="btn primary big" data-act="addfood">${sheet.editItem ? 'Guardar cambios' : `Agregar a ${meal[1]}`}</button>
@@ -2254,7 +2255,7 @@ function vMas() {
     ${ayudaHTML('')}
     <div class="card small-card"><h3>ℹ️ Importante</h3><p class="small">Esta app orienta y educa con criterios de entrenamiento, nutrición y kinesiología basados en evidencia, pero <b>no reemplaza la evaluación de un médico, nutricionista, kinesiólogo o psicólogo</b>. Ante dudas sobre tu salud, consulta a un profesional.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">v1.25 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">v1.26 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 

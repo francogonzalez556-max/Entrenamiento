@@ -881,3 +881,6 @@ img.fig { aspect-ratio: 240 / 188; }
 .gpfix { background: color-mix(in srgb, var(--acc) 10%, var(--bg2)); border-radius: 12px; padding: 8px 10px; margin: .4rem 0; }
 .gpfix-r { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
 .gpfix-r input { width: 6rem; }
+
+/* v1.26 */
+.fuente-fr { display: block; margin-top: 2px; }
