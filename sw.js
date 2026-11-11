@@ -1,7 +1,7 @@
 /* Service worker: la app funciona sin internet.
    Con conexión siempre busca la versión más nueva (red primero);
    sin conexión usa la copia guardada. Al publicar cambios, sube VERSION. */
-const VERSION = 'entreno-v31';
+const VERSION = 'entreno-v32';
 const FILES = [
   './', './index.html', './manifest.webmanifest', './css/app.css', './fonts/bebas-neue-latin-400.woff2',
   './js/data.js', './js/plan.js', './js/ejercicios_extra.js', './js/volumen.js', './js/foods.js', './js/marcas.js', './js/salud.js', './js/ficha.js', './js/motivacion.js', './js/celebra.js', './js/deportes.js', './js/gps.js', './js/anim.js', './js/anim3d.js', './js/anim_extra.js', './js/app.js', './js/vendor/barcode-detector.js', './js/vendor/zxing_reader.wasm',

@@ -1189,33 +1189,116 @@ function resultadosHTML(q) {
   return h || '<p class="muted small">Escribe para buscar: marraqueta, huevo, cazuela, completo…</p>';
 }
 /* ---- Alimentos propios y escáner de código de barras ---- */
+/* Alimento propio: tres formas de ingresarlo
+   - '100': valores por 100 g de la etiqueta (por defecto: siempre se puede anotar en gramos)
+   - 'porcion': valores por porción + cuántos gramos pesa esa porción
+   - 'casera': preparación casera; se escriben solo los ingredientes y la app estima el aporte por 100 g */
+const BASES_ALIM = [['100', 'Por 100 g'], ['porcion', 'Por porción'], ['casera', '🍲 Casero']];
+let faEst = null; // estimación en curso (preparación casera)
 function formAlimentoHTML(dr, o) {
   const v = (x) => esc(x ?? '');
+  const base = dr.base || (dr.bc || dr.off || (dr.id && !dr.base) ? 'porcion' : '100');
   const aviso = dr.off
     ? `<div class="okbanner">✓ Encontrado en Open Food Facts (código ${esc(dr.bc)}). <b>Revisa que coincida con la etiqueta</b> antes de guardar${dr.incompleto ? '; faltan las calorías, cópialas del envase' : ''}.</div>`
     : dr.bc && !dr.id
       ? `<div class="infobanner">No encontré el código ${esc(dr.bc)}${dr.offline ? ' (sin conexión a internet)' : ' en la base pública'}. Copia los datos de la etiqueta: quedará guardado y la próxima vez que lo escanees aparecerá de inmediato.</div>`
-      : '<p class="small muted">Copia los datos de la etiqueta del producto (por porción).</p>';
+      : '';
+  faEst = base === 'casera' && dr.est ? dr.est : null;
   return `<form id="${o.id}" class="form">${aviso}
-    <input type="hidden" name="editId" value="${v(dr.id)}"><input type="hidden" name="bc" value="${v(dr.bc)}"><input type="hidden" name="u" value="${v(dr.u || 'g')}">
-    ${dr.per100 ? `<input type="hidden" name="k100" value="${v(dr.per100.k)}"><input type="hidden" name="pr100" value="${v(dr.per100.pr)}"><input type="hidden" name="c100" value="${v(dr.per100.c)}"><input type="hidden" name="g100" value="${v(dr.per100.g)}">
-    <p class="small muted">💡 Si cambias los gramos de la porción, las calorías y macros se recalculan solos.</p>` : ''}
-    <label>Nombre<input name="n" required value="${v(dr.n)}" placeholder="ej: Yogurt protein frutilla"></label>
-    <label>Porción<input name="p" required value="${v(dr.p)}" placeholder="ej: 1 unidad (155 g)"></label>
-    <div class="row2"><label>Calorías (kcal)<input name="k" type="text" inputmode="decimal" required value="${v(dr.k)}"></label><label>Proteína (g)<input name="pr" type="text" inputmode="decimal" value="${v(dr.pr ?? 0)}"></label></div>
-    <div class="row2"><label>Carbohidratos (g)<input name="c" type="text" inputmode="decimal" value="${v(dr.c ?? 0)}"></label><label>Grasas (g)<input name="g" type="text" inputmode="decimal" value="${v(dr.g ?? 0)}"></label></div>
-    <label>Gramos o ml de esa porción (para poder ingresar por peso)<input name="gp" type="text" inputmode="decimal" value="${v(dr.gp)}" placeholder="ej: 155"></label>
+    <input type="hidden" name="editId" value="${v(dr.id)}"><input type="hidden" name="bc" value="${v(dr.bc)}"><input type="hidden" name="u" value="${v(dr.u || 'g')}"><input type="hidden" name="base" value="${base}">
+    ${dr.per100 ? `<input type="hidden" name="k100" value="${v(dr.per100.k)}"><input type="hidden" name="pr100" value="${v(dr.per100.pr)}"><input type="hidden" name="c100" value="${v(dr.per100.c)}"><input type="hidden" name="g100" value="${v(dr.per100.g)}">` : ''}
+    <label>Nombre<input name="n" required value="${v(dr.n)}" placeholder="${base === 'casera' ? 'ej: Zapallo italiano relleno' : 'ej: Yogurt protein frutilla'}"></label>
+    <span class="lbl">¿Cómo quieres ingresarlo?</span>
+    <div class="seg fa-base">${BASES_ALIM.map(([k, t]) => `<button type="button" class="${k === base ? 'on' : ''}" data-act="fabase" data-b="${k}">${t}</button>`).join('')}</div>
+    <div class="fa-campos">${camposAlimento(dr, base)}</div>
     ${dr.bc ? `<p class="small muted">🏷️ Código de barras: ${esc(dr.bc)}</p>` : ''}
     <button class="btn primary big">${o.boton}</button>
     ${o.volver}</form>`;
 }
+function camposAlimento(dr, base) {
+  const v = (x) => esc(x ?? '');
+  const macros = (sufijo) => `<div class="row2"><label>Calorías (kcal)${sufijo}<input name="k" type="text" inputmode="decimal" required value="${v(dr.k)}"></label><label>Proteína (g)${sufijo}<input name="pr" type="text" inputmode="decimal" value="${v(dr.pr ?? 0)}"></label></div>
+    <div class="row2"><label>Carbohidratos (g)${sufijo}<input name="c" type="text" inputmode="decimal" value="${v(dr.c ?? 0)}"></label><label>Grasas (g)${sufijo}<input name="g" type="text" inputmode="decimal" value="${v(dr.g ?? 0)}"></label></div>`;
+  if (base === 'porcion') {
+    return `<p class="small muted">Copia los datos de la etiqueta por porción.${dr.per100 ? ' Si cambias los gramos de la porción, las calorías y macros se recalculan solos.' : ''}</p>
+    <label>Porción<input name="p" required value="${v(dr.p)}" placeholder="ej: 1 unidad (155 g)"></label>
+    ${macros('')}
+    <label>¿Cuántos gramos (o ml) pesa esa porción?<input name="gp" type="text" inputmode="decimal" value="${v(dr.gp)}" placeholder="ej: 155"></label>
+    <p class="small muted">⚖️ Con este dato también podrás anotarlo en gramos. Sin él, solo por porción.</p>`;
+  }
+  const casera = base === 'casera';
+  return `${casera ? `<label>Ingredientes principales, sin cantidades<textarea name="ingr" rows="2" placeholder="ej: zapallo italiano, carne molida, cebolla, arroz, queso">${v(dr.ingr)}</textarea></label>
+      <p class="small muted">Escribe primero el ingrediente principal. No hace falta poner sal ni condimentos.</p>
+      <button type="button" class="btn wide" data-act="faest">🧮 Calcular aporte estimado</button>
+      <div class="fa-est">${faEst ? estHTML(faEst) : ''}</div>`
+    : '<p class="small muted">Copia los valores de la columna <b>"por 100 g"</b> de la etiqueta.</p>'}
+    ${macros(casera ? ' en 100 g' : ' en 100 g')}
+    <label>Peso de 1 porción o unidad (opcional, en g)<input name="gp1" type="text" inputmode="decimal" value="${v(dr.gp1)}" placeholder="${casera ? 'ej: 280 (1 zapallo relleno)' : 'ej: 155'}"></label>
+    <p class="small muted">⚖️ Siempre podrás anotarlo en gramos. Si indicas el peso de una porción, también podrás anotarlo "por porción".</p>`;
+}
+
+/* ---- Estimación de una preparación casera a partir de sus ingredientes (sin cantidades) ----
+   Proporciones típicas: el primer ingrediente es el principal; verduras y carnes pesan más que
+   el arroz o el pan rallado; queso y salsas menos; aceite ~3 %; sal y condimentos no suman. */
+const CONDIMENTO_RX = /\b(sal|pimienta|comino|oregano|ajo|perejil|cilantro|merken|aji de color|paprika|laurel|agua|caldo|especias|alino|nuez moscada|ciboulette)\b/;
+const GRASA_RX = /\b(aceite|mantequilla|margarina|manteca)\b/;
+const AROMA_RX = /\b(cebolla|cebollin|pimenton|zanahoria|apio|puerro|tomate)\b/;
+const PESO_CAT = { 'Verduras y aderezos': 3, Ensaladas: 3, Frutas: 2, 'Carnes y huevos': 2.5, Legumbres: 2.2, 'Pan y cereales': 1.5, 'Lácteos': 1, 'Salsas y aderezos': 0.4 };
+function estimarCasera(txt) {
+  const items = [], faltan = [];
+  partesTexto(txt).forEach((t) => {
+    if (CONDIMENTO_RX.test(t) && !GRASA_RX.test(t)) return;
+    const todos = matchAlimento(t).filter((f) => f.gp && !f.rec);
+    const food = todos.find((f) => !['Platos preparados', 'Snacks y dulces', 'Bebidas'].includes(f.cat)) || todos[0];
+    if (!food) { faltan.push(t); return; }
+    const grasa = GRASA_RX.test(t);
+    let w = grasa ? 0 : AROMA_RX.test(t) && items.length ? 1.2 : PESO_CAT[food.cat] ?? 1;
+    if (!items.length && !grasa) w *= 1.6; // el primero es el principal
+    items.push({ t, n: food.n, per: per100(food), w, grasa });
+  });
+  const nG = items.filter((x) => x.grasa).length, resto = 100 - 3 * nG, sw = items.filter((x) => !x.grasa).reduce((a, x) => a + x.w, 0) || 1;
+  items.forEach((x) => { x.pct = x.grasa ? 3 : Math.round((resto * x.w) / sw); });
+  return { items, faltan };
+}
+function totalEst(est) {
+  const sp = est.items.reduce((a, x) => a + (num(x.pct) || 0), 0);
+  if (!sp) return null;
+  const t = { k: 0, pr: 0, c: 0, g: 0 };
+  for (const x of est.items) for (const k of Object.keys(t)) t[k] += ((num(x.pct) || 0) / sp) * (x.per[k] || 0);
+  return { k: Math.round(t.k), pr: r1(t.pr), c: r1(t.c), g: r1(t.g) };
+}
+function estHTML(est) {
+  if (!est.items.length) return `<p class="small warn-t">No reconocí los ingredientes${est.faltan.length ? ` (${est.faltan.map(esc).join(', ')})` : ''}. Escríbelos separados por comas, por ejemplo: zapallo, carne molida, cebolla.</p>`;
+  return `<div class="fa-tabla"><p class="small"><b>Proporción supuesta</b> (ajústala si sabes que lleva más de algo):</p>
+    ${est.items.map((x, i) => `<div class="fa-r"><span class="grow">${esc(x.n)}</span><input type="text" inputmode="numeric" data-fapct="${i}" value="${x.pct}" aria-label="Porcentaje de ${esc(x.n)}"><span>%</span></div>`).join('')}
+    ${est.faltan.length ? `<p class="small warn-t">No encontré: ${est.faltan.map(esc).join(', ')}. Si es importante, escríbelo de otra forma.</p>` : ''}
+    <p class="small muted">Es una estimación con proporciones típicas de una preparación casera. Los valores de abajo (por 100 g) se completaron solos y puedes corregirlos.</p></div>`;
+}
+function aplicarEst(form) {
+  const t = faEst && totalEst(faEst);
+  if (!t || !form) return;
+  for (const k of ['k', 'pr', 'c', 'g']) { const el = form.querySelector(`[name="${k}"]`); if (el) el.value = String(t[k]).replace('.', ','); }
+}
+
 function guardarAlimento(d) {
-  const a = { n: d.n.trim(), p: d.p.trim(), k: num(d.k) || 0, pr: num(d.pr) || 0, c: num(d.c) || 0, g: num(d.g) || 0, gp: num(d.gp) || null, u: d.u || 'g', cat: 'Mis alimentos', ...(d.bc ? { bc: d.bc } : {}) };
+  const u = d.u || 'g', base = d.base || 'porcion';
+  let a;
+  if (base === 'porcion') {
+    a = { n: d.n.trim(), p: d.p.trim(), k: num(d.k) || 0, pr: num(d.pr) || 0, c: num(d.c) || 0, g: num(d.g) || 0, gp: num(d.gp) || null };
+  } else {
+    // valores por 100 g; si hay peso de porción, la porción guardada es esa (y se puede anotar de las dos formas)
+    const p100 = { k: num(d.k) || 0, pr: num(d.pr) || 0, c: num(d.c) || 0, g: num(d.g) || 0 }, gp1 = num(d.gp1), f = gp1 ? gp1 / 100 : 1;
+    a = { n: d.n.trim(), p: gp1 ? `1 porción (${fmtN(gp1)} ${u})` : `100 ${u}`, k: Math.round(p100.k * f), pr: r1(p100.pr * f), c: r1(p100.c * f), g: r1(p100.g * f), gp: gp1 || 100, p100, ...(gp1 ? { gp1 } : {}) };
+    if (base === 'casera' && d.ingr && d.ingr.trim()) a.ingr = d.ingr.trim();
+  }
+  Object.assign(a, { u, cat: 'Mis alimentos', base, ...(d.bc ? { bc: d.bc } : {}) });
   const i = d.editId ? S.propios.findIndex((x) => x.id === d.editId) : -1;
   if (i >= 0) { a.id = d.editId; S.propios[i] = a; } else { a.id = 'u' + Date.now(); S.propios.push(a); }
   save(true);
   return a;
 }
+// para editar: un alimento guardado por 100 g vuelve al formulario con sus valores por 100 g
+const draftDeAlimento = (a) => (a.p100 ? { ...a, k: a.p100.k, pr: a.p100.pr, c: a.p100.c, g: a.p100.g } : a);
 // Convierte un producto de Open Food Facts (valores por 100 g) a una porción de la app
 function desdeOFF(code, p) {
   const n = p.nutriments || {};
@@ -1385,7 +1468,9 @@ function sheetHTML() {
       : `<div class="qty"><button class="btn" data-act="qty" data-d="-0.5" aria-label="Menos">−</button><input id="fq" type="text" inputmode="decimal" value="${fmtN(q, 2)}" aria-label="Cantidad de porciones"><button class="btn" data-act="qty" data-d="0.5" aria-label="Más">+</button></div>
         <div class="chips">${[0.5, 1, 1.5, 2, 3].map((x) => `<button class="tab ${x === q ? 'on' : ''}" data-act="qset" data-q="${x}">${String(x).replace('.', ',')}</button>`).join('')}</div>
         <p class="prev" id="fprev">${prevTxt(f, q)}</p>`;
+    const sinGr = !f.gp && !f.rec && S.propios.some((x) => x.id === f.id);
     body = `<div class="pick"><b class="pick-n">${esc(f.n)}</b><span class="muted small">Porción: ${esc(f.p)} = ${f.k} kcal${f.gp ? ` · ${fmtN(f.gp)} ${u}` : ''}</span>
+      ${sinGr ? `<div class="gpfix"><span class="small">⚖️ Para anotarlo en gramos, indica cuánto pesa 1 porción (${esc(f.p)}):</span><div class="gpfix-r"><input id="gpfix" type="text" inputmode="decimal" placeholder="ej: 250"><span class="qu">${u}</span><button class="btn small-btn" data-act="gpfix">Guardar</button></div></div>` : ''}
       ${modo}${ctrl}
       <button class="btn primary big" data-act="addfood">${sheet.editItem ? 'Guardar cambios' : `Agregar a ${meal[1]}`}</button>
       ${f.rec && !sheet.editItem ? `<button class="btn wide" data-act="recedit">🍳 Ver / editar ingredientes (${f.rec.ings.length})</button>` : ''}
@@ -1674,14 +1759,14 @@ function vAlimentos() {
   const L = [...S.propios].sort((a, b) => a.n.localeCompare(b.n));
   return `${header('Mis alimentos', '#/mas')}<section class="wrap">
     <p class="small muted">Productos que creaste o escaneaste y tus preparaciones 🍳. Puedes corregir sus valores o eliminarlos; lo que ya registraste en días anteriores no cambia. Las preparaciones se editan desde Comida → + Agregar → elígela → «Ver / editar ingredientes».</p>
-    ${L.length ? `<div class="card">${L.map((a) => `<div class="fi"><div class="grow"><b>${a.rec ? '🍳 ' : ''}${esc(a.n)}</b><span class="small muted">${esc(a.p)} · ${a.k} kcal · ${a.pr} g prot.${a.bc ? ' · 🏷️ ' + esc(a.bc) : ''}${a.rec ? ` · ${a.rec.ings.map((i) => esc(i.n + (i.marca ? ' ' + i.marca : ''))).join(', ')}` : ''}</span></div>${a.rec ? '' : `<a class="btn small-btn" href="#/alimento/${a.id}">Editar</a>`}<button class="link danger" data-act="delpropio" data-id="${a.id}" aria-label="Eliminar">✕</button></div>`).join('')}</div>`
+    ${L.length ? `<div class="card">${L.map((a) => `<div class="fi"><div class="grow"><b>${a.rec ? '🍳 ' : ''}${esc(a.n)}</b><span class="small muted">${esc(a.p)} · ${a.k} kcal · ${a.pr} g prot.${a.bc ? ' · 🏷️ ' + esc(a.bc) : ''}${a.ingr ? ` · 🍲 ${esc(a.ingr)}` : ''}${a.rec ? ` · ${a.rec.ings.map((i) => esc(i.n + (i.marca ? ' ' + i.marca : ''))).join(', ')}` : ''}</span></div>${a.rec ? '' : `<a class="btn small-btn" href="#/alimento/${a.id}">Editar</a>`}<button class="link danger" data-act="delpropio" data-id="${a.id}" aria-label="Eliminar">✕</button></div>`).join('')}</div>`
       : '<div class="card"><p class="muted">Aún no tienes alimentos propios. Créalos o escanéalos desde Comida → + Agregar.</p></div>'}
   </section>`;
 }
 function vAlimento(id) {
   const a = S.propios.find((x) => x.id === id);
   if (!a) return vAlimentos();
-  return `${header('Editar alimento', '#/alimentos')}<section class="wrap"><div class="card">${formAlimentoHTML(a, { id: 'fpropio', boton: 'Guardar cambios', volver: '<a class="btn ghost big" href="#/alimentos">Cancelar</a>' })}</div></section>`;
+  return `${header('Editar alimento', '#/alimentos')}<section class="wrap"><div class="card">${formAlimentoHTML(draftDeAlimento(a), { id: 'fpropio', boton: 'Guardar cambios', volver: '<a class="btn ghost big" href="#/alimentos">Cancelar</a>' })}</div></section>`;
 }
 
 /* ---- MI EQUIPAMIENTO ---- */
@@ -2169,7 +2254,7 @@ function vMas() {
     ${ayudaHTML('')}
     <div class="card small-card"><h3>ℹ️ Importante</h3><p class="small">Esta app orienta y educa con criterios de entrenamiento, nutrición y kinesiología basados en evidencia, pero <b>no reemplaza la evaluación de un médico, nutricionista, kinesiólogo o psicólogo</b>. Ante dudas sobre tu salud, consulta a un profesional.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">v1.24 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">v1.25 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 
@@ -2656,6 +2741,32 @@ const actions = {
     Object.assign(sheet, { food: null, custom: false, scan: false, draft: null }); renderSheet();
   },
   customfood() { Object.assign(sheet, { custom: true, draft: null }); renderSheet(); },
+  fabase(btn) {
+    const form = btn.closest('form'), d = Object.fromEntries(new FormData(form)), b = btn.dataset.b;
+    form.querySelector('[name="base"]').value = b;
+    form.querySelectorAll('[data-act="fabase"]').forEach((x) => x.classList.toggle('on', x === btn));
+    if (b !== 'casera') faEst = null;
+    form.querySelector('.fa-campos').innerHTML = camposAlimento({ ...d, est: faEst }, b);
+    const nom = form.querySelector('[name="n"]');
+    if (nom) nom.placeholder = b === 'casera' ? 'ej: Zapallo italiano relleno' : 'ej: Yogurt protein frutilla';
+  },
+  faest(btn) {
+    const form = btn.closest('form'), txt = form.querySelector('[name="ingr"]').value;
+    if (!txt.trim()) { toast('Escribe los ingredientes, separados por comas'); return; }
+    faEst = estimarCasera(txt);
+    form.querySelector('.fa-est').innerHTML = estHTML(faEst);
+    aplicarEst(form);
+    if (faEst.items.length) toast('Valores estimados por 100 g ✓');
+  },
+  gpfix() {
+    const g = num($('#gpfix')?.value);
+    if (!g || g <= 0 || g > 5000) { toast('Indica los gramos de 1 porción'); return; }
+    const a = S.propios.find((x) => x.id === sheet.food.id);
+    if (a) a.gp = g;
+    sheet.food = { ...sheet.food, gp: g };
+    Object.assign(sheet, { mode: 'g', gr: g });
+    save(true); renderSheet(); toast('Listo: ahora puedes anotarlo en gramos');
+  },
   scanopen() { Object.assign(sheet, { scan: true, custom: false, food: null }); renderSheet(); },
   scanclose() { sheet.scan = false; renderSheet(); },
   bcbuscar() { buscarCodigo($('#bcmanual').value); },
@@ -3153,6 +3264,10 @@ function init() {
     if (a && actions[a.dataset.act]) { e.preventDefault(); actions[a.dataset.act](a, e); }
   });
   main.addEventListener('input', (e) => {
+    if (e.target.dataset.fapct != null && faEst) {
+      faEst.items[+e.target.dataset.fapct].pct = num(e.target.value) || 0;
+      aplicarEst(e.target.closest('form'));
+    }
     const el = e.target;
     if (el.dataset.depdolor && depDraft) {
       depDraft.dolor[el.dataset.depdolor] = +el.value;
@@ -3280,7 +3395,7 @@ function init() {
     } else if (f.id === 'fcustom') {
       const a = guardarAlimento(d);
       toast(d.bc ? 'Producto guardado en Mis alimentos ✓' : 'Alimento guardado ✓');
-      Object.assign(sheet, { custom: false, draft: null, food: a, q: 1, mode: 'u', gr: a.gp || 100 });
+      Object.assign(sheet, { custom: false, draft: null, food: a, q: 1, mode: a.base && a.base !== 'porcion' && !a.gp1 ? 'g' : 'u', gr: a.gp1 || 100 });
       renderSheet();
     } else if (f.id === 'fpropio') {
       guardarAlimento(d);

@@ -870,3 +870,14 @@ img.fig { aspect-ratio: 240 / 188; }
 @keyframes fz-lat { 50% { transform: scale(1.25) rotate(-8deg); } }
 .pesoopc { margin: .2rem 0 0; }
 @media (prefers-reduced-motion: reduce) { #hito, .fz-card, .fz-ico, .fiesta { animation: none !important; transition: none !important; } }
+
+/* ---------- v1.25: alimento propio por 100 g / casero ---------- */
+.fa-base { margin: .2rem 0 .6rem; grid-template-columns: repeat(3, 1fr); }
+.fa-base button { padding-left: 4px; padding-right: 4px; }
+.fa-tabla { background: var(--bg2); border-radius: 12px; padding: 8px 10px; margin: .5rem 0; }
+.fa-r { display: flex; align-items: center; gap: 6px; padding: 3px 0; border-bottom: 1px solid var(--line); }
+.fa-r:last-of-type { border-bottom: 0; }
+.fa-r input { width: 4.2rem; text-align: right; }
+.gpfix { background: color-mix(in srgb, var(--acc) 10%, var(--bg2)); border-radius: 12px; padding: 8px 10px; margin: .4rem 0; }
+.gpfix-r { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
+.gpfix-r input { width: 6rem; }
