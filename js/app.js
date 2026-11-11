@@ -376,7 +376,7 @@ function getLog(date, sid, create) {
   const k = logKey(date, sid);
   if (!S.logs[k] && create) {
     const wi = weekInfo(date);
-    S.logs[k] = { sid, nombre: getSes(sid)?.nombre, fecha: date, week: wi.week, phase: wi.phase, ex: {}, cardio: {}, warm: false, rpe: 6, rodilla: 0, dolor: Object.fromEntries(zonasUsuario().map((z) => [z, 0])), notas: '', done: false };
+    S.logs[k] = { sid, nombre: getSes(sid)?.nombre, fecha: date, week: wi.week, phase: wi.phase, ex: {}, cardio: {}, warm: false, rpe: 6, rodilla: 0, dolor: Object.fromEntries(zonasUsuario().map((z) => [z, 0])), notas: '', done: false, ini: new Date().toISOString() };
   }
   return S.logs[k];
 }
@@ -832,6 +832,7 @@ function vSesion(date, sid) {
         <div class="blk-h"><div class="thumb" data-act="tech" data-id="${it.id}">${Fig.still(ANIMS[it.id], 1, musculosDe(it.id)) || '<div class="noanim">🏋️</div>'}</div>
           <div class="grow"><h3>${esc(ex.nombre)}</h3><p class="rx">${it.circ ? `${it.sets} rondas × ${it.reps}` : `${it.sets} × ${it.reps}${ex.porLado ? ' por lado' : ''} · descanso ${it.rest} s`}${it.enf ? ` <span class="tag-enf" title="Ajuste de volumen">🎯 ${it.enf === 'nuevo' ? 'extra' : it.enf}</span>` : ''}</p>
           <div class="exlinks"><button class="link" data-act="tech" data-id="${it.id}">▶ Ver técnica</button><button class="link" data-act="subopen" data-id="${it.id}" data-orig="${it.orig || it.id}">↔ Cambiar</button></div>
+          ${pesoOpcHTML(it.id)}
           ${it.autoDolor ? `<p class="small muted">🔴 En lugar de ${esc(getEj(it.orig).nombre)}, por tu molestia de ${ZONAS[it.autoDolor].toLowerCase()}.</p>`
             : it.orig ? `<p class="small muted">En lugar de ${esc(getEj(it.orig).nombre)} · <button class="link small" data-act="subundo" data-orig="${it.orig}">volver al original</button></p>` : ''}
           ${it.ss ? `<p class="small">🔁 <b>Superserie</b> con ${esc(getEj(it.ss).nombre)}: alterna una serie de cada uno y descansa ${it.rest} s después de cada par.</p>` : ''}
@@ -2168,7 +2169,7 @@ function vMas() {
     ${ayudaHTML('')}
     <div class="card small-card"><h3>ℹ️ Importante</h3><p class="small">Esta app orienta y educa con criterios de entrenamiento, nutrición y kinesiología basados en evidencia, pero <b>no reemplaza la evaluación de un médico, nutricionista, kinesiólogo o psicólogo</b>. Ante dudas sobre tu salud, consulta a un profesional.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">v1.23 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">v1.24 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 
@@ -2422,7 +2423,11 @@ const actions = {
       if (ri && !ri.value && ri.placeholder) { ri.value = ri.placeholder; s.r = ri.value; }
       startTimer(+row.dataset.rest || 60);
       const pr = esRecord(id, s);
-      if (pr) { toast(pr); navigator.vibrate?.([60, 40, 60]); }
+      if (pr) {
+        toast(pr); navigator.vibrate?.([60, 40, 60]);
+        const lgp = getLog(ctx.date, ctx.sid, true);
+        lgp.prIds = [...new Set([...(lgp.prIds || []), id])];
+      }
       // propagar peso a la siguiente serie
       const next = row.nextElementSibling?.querySelector('[data-f="w"]');
       if (next && !next.value && s.w) next.placeholder = s.w;
@@ -2431,6 +2436,7 @@ const actions = {
     btn.classList.toggle('on', s.ok);
     refreshExDone(id);
     save();
+    if (s.ok) revisarAvance();
     // al completar un ejercicio, avisa cuál sigue
     const card = row.closest('[data-exc]');
     if (s.ok && card?.classList.contains('done')) {
@@ -2453,6 +2459,7 @@ const actions = {
     btn.classList.toggle('on', lg.warm);
     $('#warm').classList.toggle('done', lg.warm);
     save(); refreshProg();
+    if (lg.warm) revisarAvance();
   },
   cardiook(btn) {
     const lg = getLog(ctx.date, ctx.sid, true), k = btn.dataset.key;
@@ -2466,6 +2473,7 @@ const actions = {
     btn.classList.toggle('on', c.ok);
     card.classList.toggle('done', c.ok);
     save(); refreshProg();
+    if (c.ok) revisarAvance();
   },
   tech(el) {
     const id = el.dataset.id;
@@ -2495,13 +2503,16 @@ const actions = {
       return;
     }
     closeModal();
+    const incompleta = estadoItems().some((x) => x.estado !== 'ok');
     lg.done = true;
     lg.fin = new Date().toISOString();
     save(true);
     stopTimer();
     const sets = Object.values(lg.ex).reduce((a, e) => a + e.sets.filter((s) => s.ok).length, 0);
     const min = Object.values(lg.cardio).reduce((a, c) => a + (num(c.min) || 0), 0);
-    toast(was ? 'Cambios guardados' : `¡Sesión completada! 💪 ${sets} series · ${fmtMin(min)} de cardio`);
+    if (was) toast('Cambios guardados');
+    else if ((lg.alertas || []).length) toast('Sesión guardada. Revisa el aviso de la señal de alerta en Hoy.');
+    else { try { celebrarSesion(lg, incompleta); } catch (er) { toast(`¡Sesión completada! 💪 ${sets} series · ${fmtMin(min)} de cardio`); } }
     location.hash = '#/hoy';
   },
   finishforce(btn, e) { actions.finish(btn, e, true); },

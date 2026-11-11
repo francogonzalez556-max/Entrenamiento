@@ -448,12 +448,13 @@ const EJERCICIOS = {
   elevacion_talones: {
     nombre: 'Elevación de talones (pantorrillas)',
     musculos: 'Pantorrillas, tobillo',
-    equipo: 'Pared para apoyo (opcional mancuerna)',
-    tipo: 'fuerza', step: 2,
+    equipo: 'Pared o marco de puerta para apoyo (sin peso)',
+    tipo: 'fuerza', step: 0,
     pasos: [
-      'De pie frente a una pared, manos apoyadas para equilibrio.',
-      'Sube en puntas de pie lo más alto posible.',
-      'Pausa 1 s arriba y baja lento (3 s).',
+      'De pie frente a una pared, pies al ancho de cadera y manos apoyadas solo para el equilibrio.',
+      'Sube en puntas de pie lo más alto posible, con el peso sobre el dedo gordo.',
+      'Pausa 1 s arriba y baja lento (3 s) hasta apoyar todo el talón.',
+      'Cuando hagas 20 repeticiones con facilidad, cámbialo (↔) por la versión a una pierna.',
     ],
     errores: ['Rebotar', 'Rango corto', 'Doblar las rodillas'],
     rodilla: 'Fortalece la cadena de la pierna completa y mejora la estabilidad en escaleras.',
