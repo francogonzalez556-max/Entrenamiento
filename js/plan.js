@@ -353,7 +353,9 @@ const SLOTS = {
   empujeH: ['press_banca', 'press_suelo', 'flexiones', 'flexiones_inclinadas', 'press_banca_mancuernas', 'press_inclinado_mancuernas', 'press_pecho_maquina', 'flexiones_trx', 'press_pecho_banda', 'flexiones_rodillas'],
   empujeV: ['press_militar', 'press_militar_pie', 'press_hombro_maquina', 'press_arnold', 'press_hombro_banda', '~elevaciones_laterales', '~face_pull', '~rotacion_externa_banda'],
   tironH: ['remo_polea', 'remo_mancuerna', 'remo_barra', 'remo_trx', 'remo_pecho_apoyado', 'remo_maquina', 'remo_invertido', 'remo_banda_pie', 'remo_polea_unilateral', '~superman'],
-  tironV: ['dominadas', 'jalon', 'dominadas_supinas', 'jalon_cerrado', 'dominadas_asistidas', 'jalon_banda'],
+  tironV: ['dominadas', 'jalon', 'dominadas_supinas', 'jalon_cerrado', 'dominadas_asistidas', 'jalon_banda', 'pullover'],
+  // sin tirón vertical: espalda alta y hombro posterior (distinto del remo que ya tiene la sesión)
+  tironAlt: ['face_pull', 'pajaros', 'ytw'],
   hombroL: ['elevaciones_laterales', 'face_pull', 'pajaros', 'elevacion_lateral_polea', 'elevaciones_frontales'],
   biceps: ['curl_biceps', 'curl_martillo', 'curl_barra', 'curl_polea', 'curl_banda', 'curl_concentrado'],
   triceps: ['extension_triceps_polea', 'extension_triceps', 'press_frances', 'patada_triceps', 'extension_triceps_banda', 'fondos_banco'],
@@ -380,8 +382,31 @@ const RX = {
    ej: espacio [nombre, rx | clave RX, rango (0 = 1ª opción), prioridad (1 siempre, 2 normal, 3 solo sesiones largas), opcional] */
 const E = (slot, rx, rank = 0, prio = 2, opt = false) => ({ slot, rx, rank, prio, opt, alt: opt && slot === 'tironV' ? ALT_TIRON('acc') : null });
 // sin tirón vertical disponible (casa sin barra/poleas) se agrega otro remo: mantiene el equilibrio empuje/tirón
-const ALT_TIRON = (rx) => ({ slot: 'tironH', rank: 1, rx });
+const ALT_TIRON = (rx) => ({ slot: 'tironAlt', rank: 0, rx });
 // ejercicios principales (multiarticulares): no rotan entre ciclos
+/* Familias de movimiento: dos ejercicios de la misma familia son "el mismo con otro nombre"
+   y no se repiten en una sesión (p. ej. remo con mancuerna y remo con pecho apoyado) */
+const FAMILIAS = {
+  sentadilla: ['sentadilla_barra', 'sentadilla_goblet', 'sentadilla_cajon', 'sentadilla_cajon_alta', 'sentadilla_banda', 'sentadilla_aire', 'sentadilla_pausa', 'sentadilla_frontal', 'sentadilla_sumo', 'sentadilla_hack'],
+  zancada: ['zancada', 'zancada_frontal', 'zancada_lateral', 'sentadilla_bulgara', 'subida_cajon'],
+  isometrica: ['sentadilla_pared', 'sentadilla_pared_peso', 'sentadilla_espanola'],
+  bisagra: ['peso_muerto', 'peso_muerto_rumano', 'peso_muerto_mancuernas', 'peso_muerto_kb', 'peso_muerto_sumo', 'buenos_dias', 'peso_muerto_una_pierna'],
+  puente: ['puente', 'puente_isquios', 'puente_una_pierna', 'puente_banda', 'hip_thrust_banco'],
+  abduccion: ['abduccion_cadera', 'almeja', 'abduccion_maquina', 'caminata_lateral_banda'],
+  flexion: ['flexiones', 'flexiones_inclinadas', 'flexiones_rodillas', 'flexiones_pared', 'flexiones_trx', 'flexiones_declinadas', 'flexiones_cerradas'],
+  press_plano: ['press_banca', 'press_banca_mancuernas', 'press_suelo', 'press_pecho_maquina', 'press_pecho_banda'],
+  remo_inclinado: ['remo_barra', 'remo_pecho_apoyado', 'remo_t', 'remo_mancuerna'],
+  remo_sentado: ['remo_polea', 'remo_maquina', 'remo_banda_pie', 'remo_polea_unilateral'],
+  remo_corporal: ['remo_trx', 'remo_invertido'],
+  jalon: ['jalon', 'jalon_cerrado', 'jalon_banda'],
+  dominada: ['dominadas', 'dominadas_supinas', 'dominadas_asistidas', 'dominadas_negativas'],
+  hombro_post: ['face_pull', 'pajaros', 'ytw'],
+  plancha: ['plancha', 'plancha_rodillas', 'plancha_toque_hombros', 'plancha_trx', 'rueda_abdominal'],
+  plancha_lat: ['plancha_lateral', 'plancha_lateral_rodillas'],
+};
+const FAM = {};
+for (const [f, ids] of Object.entries(FAMILIAS)) ids.forEach((id) => { FAM[id] = f; });
+const familia = (id) => FAM[id] || id;
 const SLOT_PRINCIPAL = ['pierna', 'bisagra', 'bisagra_m', 'empujeH', 'empujeV', 'tironH', 'tironV'];
 const PLANTILLAS = {
   // ---- Quemar grasa / tonificar / cardio / salud (A-D = plan original) ----
@@ -496,7 +521,7 @@ function generarPlan(p, ciclo = 1) {
   // fijo = ejercicio principal: se mantiene entre ciclos para seguir progresando la carga
   const elegir = (slot, rank, usados, fijo = false, sinRespaldo = false) => {
     const todas = SLOTS[slot] || [];
-    const ok = (id) => disponible(id, p, eq) && !usados.has(id);
+    const ok = (id) => disponible(id, p, eq) && !usados.has(familia(id));
     const ops = todas.filter((x) => x[0] !== '~').filter(ok);
     if (ops.length) {
       const base = ops[Math.min(rank - rot, ops.length - 1)];
@@ -528,7 +553,7 @@ function generarPlan(p, ciclo = 1) {
           if (id && prev?.tipo === 'ej' && !prev.ss) { prev.ss = id; ss = prev.id; }
         }
         if (!id) continue;
-        usados.add(id);
+        usados.add(familia(id));
         const ex = EJERCICIOS[id];
         const rx = Array.isArray(rxB) ? rxB : RX[ex.tipo === 'tiempo' ? 'tiempo' : rxB];
         bloques.push(ss ? { tipo: 'ej', id, rx: ajustar(rx), ss } : { tipo: 'ej', id, rx: ajustar(rx) });
@@ -536,7 +561,7 @@ function generarPlan(p, ciclo = 1) {
         const ejercicios = [];
         for (const s of b.slots) {
           const id = elegir(s.slot, rot, usados);
-          if (id) { usados.add(id); ejercicios.push({ id, fases: s.fases }); }
+          if (id) { usados.add(familia(id)); ejercicios.push({ id, fases: s.fases }); }
         }
         bloques.push({ ...b, ejercicios });
       } else bloques.push(b);

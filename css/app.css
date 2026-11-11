@@ -824,3 +824,19 @@ details.banderas .chkl { font-size: .85rem; color: var(--tx); margin: 6px 0; }
 .ayuda-cant summary { cursor: pointer; }
 .ayuda-cant ul { margin: .3rem 0; padding-left: 1.1rem; }
 .alts .tab { font-family: inherit; text-transform: none; letter-spacing: 0; font-size: .78rem; font-weight: 600; }
+
+/* ---------- v1.23: figura humana (hombre / mujer) ---------- */
+.fig { --skin: #e8b28c; --top: #2f7de1; --bot: #2a2e38; --hair: #3a271c; --shoe: #f1f1f4; --eye: #2a1c15; }
+.fig.mujer { --skin: #edbb98; --top: #1fa39b; --bot: #3d3556; --hair: #6a3d22; }
+.pc { --cc: var(--c); fill: var(--cc); stroke: var(--cc); }
+.pc.skin { --c: var(--skin); } .pc.top { --c: var(--top); } .pc.bot { --c: var(--bot); } .pc.hair { --c: var(--hair); } .pc.shoe { --c: var(--shoe); } .pc.eye { --c: var(--eye); stroke: none; }
+.pc.nariz { fill: color-mix(in srgb, var(--skin) 88%, #000); stroke: none; }
+.pc.fig-mi { --cc: color-mix(in srgb, var(--musc) 42%, var(--c)); }
+.pc.fig-md { --cc: color-mix(in srgb, var(--musc) 80%, var(--c)); }
+.pc.far { fill: color-mix(in srgb, var(--cc) 74%, #000); stroke: color-mix(in srgb, var(--cc) 74%, #000); }
+.a3d-ctl button[data-c3="fig"] { min-width: 84px; }
+
+/* ---------- v1.23: figura en WebGL ---------- */
+canvas.a3d-svg { display: block; width: 100%; height: auto; object-fit: contain; }
+.libi img.fig { background: var(--bg2); border-radius: 10px; margin-bottom: 4px; aspect-ratio: 240 / 188; }
+img.fig { aspect-ratio: 240 / 188; }

@@ -24,8 +24,10 @@ const Fig = (() => {
 
   function limb(S, spec, l1, l2, defBend) {
     if (spec.ik) return ik(S, spec.ik, l1, l2, spec.bend ?? defBend);
-    const J = add(S, dir(spec.a[0], l1));
-    return [J, add(J, dir(spec.a[1], l2))];
+    // o = inclinación fuera del plano lateral (hacia el costado): en 2D se ve más corto
+    const o = spec.o || [0, 0];
+    const J = add(S, dir(spec.a[0], l1 * Math.cos(rad(o[0]))));
+    return [J, add(J, dir(spec.a[1], l2 * Math.cos(rad(o[1] ?? o[0]))))];
   }
 
   /* ---- interpolación ---- */
@@ -110,26 +112,39 @@ const Fig = (() => {
     return { hip, sh, head, kn, an, kf, af, en, hn, ef, hf, tn, tf, handN: hn, handF: hf };
   }
 
+  /* vista frontal. Opcionales: legL/armL (lado izquierdo distinto, ángulos espejados; armL.ik es absoluto),
+     s = escorzo de cada segmento (hacia adelante/atrás), shUp = subir hombros, rot/rp = girar la figura en el plano */
   function frontJoints(p) {
-    const cx = p.cx, y = p.hipY;
-    const shR = [cx + 16, y - 48], shL = [cx - 16, y - 48];
+    const cx = p.cx, y = p.hipY, su = p.shUp || 0;
+    const shR = [cx + 16, y - 48 - su], shL = [cx - 16, y - 48 - su];
     const hpR = [cx + 9, y], hpL = [cx - 9, y];
-    const head = [cx, y - 66];
-    const la = p.leg.a, ls = p.leg.s || [1, 1], aa = p.arm.a;
+    const head = [cx, y - 66 - su * 0.3], neck = [cx, y - 48 - su * 0.5], bR = [cx + 11, y], bL = [cx - 11, y];
     const mir = (a) => 180 - a;
-    const kR = add(hpR, dir(la[0], L.th * ls[0])), anR = add(kR, dir(la[1], L.sh * ls[1]));
-    const kL = add(hpL, dir(mir(la[0]), L.th * ls[0])), anL = add(kL, dir(mir(la[1]), L.sh * ls[1]));
-    let eR, hR, eL, hL;
-    if (p.arm.ik) {
-      const t = p.arm.ik, bd = p.arm.bend ?? 1;
-      [eR, hR] = ik(shR, t, L.ua, L.fa, bd);
-      [eL, hL] = ik(shL, [2 * cx - t[0], t[1]], L.ua, L.fa, -bd);
-    } else {
-      eR = add(shR, dir(aa[0], L.ua)); hR = add(eR, dir(aa[1], L.fa));
-      eL = add(shL, dir(mir(aa[0]), L.ua)); hL = add(eL, dir(mir(aa[1]), L.fa));
+    const pierna = (hp, sp, m) => {
+      const ls = sp.s || [1, 1], f = m ? mir : (a) => a;
+      const k = add(hp, dir(f(sp.a[0]), L.th * ls[0]));
+      return [k, add(k, dir(f(sp.a[1]), L.sh * ls[1]))];
+    };
+    const [kR, anR] = pierna(hpR, p.leg, false);
+    const [kL, anL] = pierna(hpL, p.legL || p.leg, true);
+    const brazo = (sh, sp, m, abs) => {
+      if (sp.ik) {
+        const t = sp.ik, bd = sp.bend ?? 1;
+        return ik(sh, m && !abs ? [2 * cx - t[0], t[1]] : t, L.ua, L.fa, m ? -bd : bd);
+      }
+      const as = sp.s || [1, 1], f = m ? mir : (a) => a;
+      const e = add(sh, dir(f(sp.a[0]), L.ua * as[0]));
+      return [e, add(e, dir(f(sp.a[1]), L.fa * as[1]))];
+    };
+    const [eR, hR] = brazo(shR, p.arm, false);
+    const [eL, hL] = brazo(shL, p.armL || p.arm, true, !!p.armL);
+    const J = { shR, shL, hpR, hpL, head, neck, bR, bL, kR, anR, kL, anL, eR, hR, eL, hL };
+    if (p.rot) {
+      const c = p.rp || [cx, y], a = rad(p.rot), co = Math.cos(a), si = Math.sin(a);
+      for (const k in J) { const dx = J[k][0] - c[0], dy = J[k][1] - c[1]; J[k] = [c[0] + dx * co - dy * si, c[1] + dx * si + dy * co]; }
     }
-    const handsMid = [(hR[0] + hL[0]) / 2, (hR[1] + hL[1]) / 2];
-    return { cx, y, shR, shL, hpR, hpL, head, kR, anR, kL, anL, eR, hR, eL, hL, handR: hR, handL: hL, handsMid, ry: p.ry };
+    const handsMid = [(J.hR[0] + J.hL[0]) / 2, (J.hR[1] + J.hL[1]) / 2];
+    return { cx, y, ...J, handR: J.hR, handL: J.hL, handsMid, ry: p.ry };
   }
 
   /* ---- dibujo ---- */
@@ -256,7 +271,7 @@ const Fig = (() => {
     let s = propsSVG(anim, J, 'bg');
     s += path([J.hpL, J.kL, J.anL, add(J.anL, [-7, 0])], 'fig-n', 7.5);
     s += path([J.hpR, J.kR, J.anR, add(J.anR, [7, 0])], 'fig-n', 7.5);
-    s += `<path d="M${pt(J.shL)} L${pt(J.shR)} L${pt([J.cx + 11, J.y])} L${pt([J.cx - 11, J.y])} Z" class="fig-body"/>`;
+    s += `<path d="M${pt(J.shL)} L${pt(J.shR)} L${pt(J.bR)} L${pt(J.bL)} Z" class="fig-body"/>`;
     s += `<circle cx="${J.head[0]}" cy="${J.head[1]}" r="${L.head}" class="fig-head"/>`;
     s += path([J.shL, J.eL, J.hL], 'fig-n', 7);
     s += path([J.shR, J.eR, J.hR], 'fig-n', 7);
