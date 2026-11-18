@@ -93,3 +93,4 @@ FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
 
 Baloo 2 (Ek Type) y Nunito (Vernon Adams y colaboradores) también se distribuyen bajo la SIL Open Font License 1.1 (Google Fonts).
+Anton (Vernon Adams) e Inter (Rasmus Andersson) también se distribuyen bajo la SIL Open Font License 1.1.

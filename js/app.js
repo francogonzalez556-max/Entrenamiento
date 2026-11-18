@@ -554,6 +554,11 @@ function pulirVista(root) {
     el.appendChild(b);
   });
 }
+/* ---- Marca Athlos (v1.28): columna griega que también es una barra con discos ---- */
+const MARCA = { nombre: 'Athlos', eslogan: 'Enciende tu mejor versión' };
+const LOGO_SVG = '<svg viewBox="0 0 100 100" aria-hidden="true"><rect x="22" y="16" width="56" height="9" rx="1.5" fill="#d4ff3a"/><rect x="22" y="69" width="56" height="9" rx="1.5" fill="#d4ff3a"/><g fill="currentColor"><rect x="28" y="30" width="9" height="34" rx="1.5"/><rect x="45.5" y="30" width="9" height="34" rx="1.5"/><rect x="63" y="30" width="9" height="34" rx="1.5"/></g><path d="M20 90h12v-6h-6v-3h10v9h12v-6h-6v-3h10v9h12v-6h-6v-3h10v9h12" fill="none" stroke="#d4ff3a" stroke-width="2.6"/></svg>';
+const marcaHTML = () => `<div class="marca">${LOGO_SVG}<b>ATH<em>LOS</em></b></div>`;
+const marcaBienvHTML = () => `<div class="marca-bienv">${LOGO_SVG}<b>ATH<em>LOS</em></b><span>${MARCA.eslogan}</span></div>`;
 function header(title, back) {
   return `<header class="top">${back ? `<a href="${back}" class="back" aria-label="Volver">‹</a>` : ''}<h1>${title}</h1></header>`;
 }
@@ -667,7 +672,7 @@ function vWizard(first) {
   }
   const prog = WZ_PASOS.map((n, i) => `<i class="${i <= paso ? 'on' : ''}"></i>`).join('');
   return `${first ? '' : header('Mi perfil y objetivos', '#/mas')}<section class="wrap wz">
-    ${first && paso === 0 ? '<div class="hero"><div class="hero-ico">💪</div><h1>Armemos tu plan</h1><p>6 pasos rápidos para crear un plan a tu medida.</p></div>' : ''}
+    ${first && paso === 0 ? `<div class="hero">${marcaBienvHTML()}<h1>Armemos tu plan</h1><p>6 pasos rápidos para crear un plan a tu medida.</p></div>` : ''}
     ${first && paso === 0 && !esStandalone() && S.acceso?.codigo ? `<div class="card infobanner"><b>📲 Primero instala la app</b><p class="small">iPhone (Safari): Compartir ⬆️ → <i>Agregar a inicio</i>. Android (Chrome): menú ⋮ → <i>Instalar aplicación</i>. Luego ábrela desde el ícono; si te pide código, pega este:</p><p><b class="invcode">${S.acceso.codigo}</b> <button class="link" data-act="invcopiarmio">Copiar</button></p><p class="small muted">${S.acceso.vence ? `Tu acceso es válido hasta el ${fmt(S.acceso.vence)}.` : ''}</p></div>` : ''}
     <div class="wz-prog">${prog}</div><p class="small muted center">Paso ${paso + 1} de ${WZ_PASOS.length} · ${WZ_PASOS[paso]}</p>
     <div class="card form">${body}</div>
@@ -731,9 +736,11 @@ function vHoy() {
   const stHoy = wi.antes ? 'antes' : sid ? (getLog(t, sid)?.done ? 'done' : getLog(t, sid) ? 'prog' : 'new') : 'rest';
   const frase = { antes: 'Ya casi empezamos', done: '¡Misión de hoy cumplida!', prog: 'Vas a medio camino', new: 'Hoy toca moverse', rest: 'Hoy toca recuperar' }[stHoy];
   const rc = 30, circ = 2 * Math.PI * rc, pct = Math.min(1, hechas / totS);
+  const fp = frase.split(' '), fUlt = fp.pop();
   const hero = `<header class="hero hero-${stHoy}">
+    ${marcaHTML()}
     <div class="hero-top">
-      <div class="hero-txt"><span class="hero-hola">${p.nombre ? `Hola, ${esc(p.nombre.split(' ')[0])}` : 'Hola'} 👋</span><h1>${frase}</h1></div>
+      <div class="hero-txt"><span class="hero-hola">${p.nombre ? `Hola, ${esc(p.nombre.split(' ')[0])}` : 'Hola'}${wi.antes ? '' : ` · Semana ${wi.wk} de 12`}</span><h1>${fp.join(' ')} <em>${fUlt}</em></h1></div>
       ${wi.antes ? '' : `<div class="ring" role="img" aria-label="${hechas} de ${totS} sesiones esta semana"><svg viewBox="0 0 72 72"><circle cx="36" cy="36" r="${rc}" class="ring-f"/><circle cx="36" cy="36" r="${rc}" class="ring-a" stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${(circ * (1 - pct)).toFixed(1)}"/></svg><b>${hechas}/${totS}</b><span>semana</span></div>`}
     </div>
     ${wi.antes ? '' : nivelHTML()}
@@ -1915,8 +1922,8 @@ function accesoEstado() {
 }
 const esStandalone = () => window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true;
 function vBloqueo(estado) {
-  return `<section class="wrap bloqueo"><div class="hero"><div class="hero-ico">🔒</div>
-    <h1>${estado === 'vencido' ? 'Tu acceso terminó' : 'Mi Entrenamiento'}</h1>
+  return `<section class="wrap bloqueo"><div class="hero">${marcaBienvHTML()}
+    <h1>${estado === 'vencido' ? 'Tu acceso terminó' : 'Bienvenido'}</h1>
     <p>${estado === 'vencido' ? `Tu invitación venció el ${fmt(S.acceso.vence)}. <b>Tus datos siguen guardados</b>: pide un link nuevo a quien te invitó y continúa donde quedaste.` : 'Esta app funciona por invitación. Pide un link a quien te la recomendó.'}</p></div>
     <div class="card form"><label>Pega aquí tu link o código de invitación<input id="invcod" autocomplete="off" placeholder="ej: 20261231-ABCD-…"></label>
       <button class="btn primary big" data-act="invactivar">Activar</button></div>
@@ -2092,7 +2099,7 @@ function icsRecordatorios() {
   const escI = (t) => String(t).replace(/[\\,;]/g, (m) => '\\' + m);
   const stamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
   const url = location.origin + location.pathname;
-  const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Mi Entrenamiento//ES', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
+  const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Athlos//ES', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
   const prox = (dow) => { const d = new Date(); d.setDate(d.getDate() + ((dow - d.getDay() + 7) % 7)); return d; };
   const ev = (uid, titulo, dow, hora, dur, alarma, desc, diario) => {
     const [hh, mm] = hora.split(':');
@@ -2100,10 +2107,10 @@ function icsRecordatorios() {
       diario ? 'RRULE:FREQ=DAILY' : `RRULE:FREQ=WEEKLY;BYDAY=${D[dow]}`, `SUMMARY:${escI(titulo)}`, `DESCRIPTION:${escI(desc)}`,
       'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${escI(titulo)}`, `TRIGGER:-PT${alarma}M`, 'END:VALARM', 'END:VEVENT');
   };
-  for (const sid of PL.orden) ev('ses' + sid, `🏋️ ${PL.ses[sid].nombre}`, PL.ses[sid].dow, r.hora, S.perfil.dur || 45, r.antes, `Abre Mi Entrenamiento: ${url} · ¿Día difícil? 10 minutos también cuentan.`);
-  if (r.peso) ev('peso', '⚖️ Chequeo semanal (peso y cintura, sin presión)', +r.pesoDia, r.pesoHora, 5, 0, 'En ayunas, después de ir al baño. Lo que importa es la tendencia, no un día. Regístralo en Mi Entrenamiento.');
-  if (r.comida) ev('comida', '🍽️ Anotar lo que comí hoy', 0, r.comidaHora, 5, 0, 'Diario de comidas en Mi Entrenamiento.', true);
-  if (r.respaldo) ev('resp', '💾 Exportar respaldo de Mi Entrenamiento', 0, '20:00', 5, 0, 'Más → Exportar respaldo.');
+  for (const sid of PL.orden) ev('ses' + sid, `🏋️ ${PL.ses[sid].nombre}`, PL.ses[sid].dow, r.hora, S.perfil.dur || 45, r.antes, `Abre Athlos: ${url} · ¿Día difícil? 10 minutos también cuentan.`);
+  if (r.peso) ev('peso', '⚖️ Chequeo semanal (peso y cintura, sin presión)', +r.pesoDia, r.pesoHora, 5, 0, 'En ayunas, después de ir al baño. Lo que importa es la tendencia, no un día. Regístralo en Athlos.');
+  if (r.comida) ev('comida', '🍽️ Anotar lo que comí hoy', 0, r.comidaHora, 5, 0, 'Diario de comidas en Athlos.', true);
+  if (r.respaldo) ev('resp', '💾 Exportar respaldo de Athlos', 0, '20:00', 5, 0, 'Más → Exportar respaldo.');
   L.push('END:VCALENDAR');
   return L.join('\r\n');
 }
@@ -2293,7 +2300,7 @@ function vMas() {
     ${ayudaHTML('')}
     <div class="card small-card"><h3>ℹ️ Importante</h3><p class="small">Esta app orienta y educa con criterios de entrenamiento, nutrición y kinesiología basados en evidencia, pero <b>no reemplaza la evaluación de un médico, nutricionista, kinesiólogo o psicólogo</b>. Ante dudas sobre tu salud, consulta a un profesional.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">v1.27 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">Athlos v1.28 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 
@@ -2654,9 +2661,9 @@ const actions = {
   },
   async invshare() {
     const r = leerCodigoInv(invDraft.codigo), url = linkInv(invDraft.codigo);
-    const txt = `Te invito a Mi Entrenamiento 💪 ${r.tipo === 'total' ? '' : `(acceso hasta el ${fmt(r.vence)}) `}Abre este link en Safari (iPhone) o Chrome (Android) e instálala en tu pantalla de inicio:`;
+    const txt = `Te invito a Athlos 💪 ${MARCA.eslogan}. ${r.tipo === 'total' ? '' : `(acceso hasta el ${fmt(r.vence)}) `}Abre este link en Safari (iPhone) o Chrome (Android) e instálala en tu pantalla de inicio:`;
     try {
-      if (navigator.share) await navigator.share({ title: 'Mi Entrenamiento', text: txt, url });
+      if (navigator.share) await navigator.share({ title: 'Athlos', text: txt, url });
       else { await navigator.clipboard.writeText(`${txt} ${url}`); toast('Invitación copiada'); }
     } catch (e) { /* cancelado */ }
   },

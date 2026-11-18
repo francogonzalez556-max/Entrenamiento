@@ -3,22 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Mi Entrenamiento</title>
+  <title>Athlos · Enciende tu mejor versión</title>
   <meta name="description" content="Plan de entrenamiento en casa: rutina, técnica, registro y progreso.">
-  <meta name="theme-color" content="#0a0a0b">
+  <meta name="theme-color" content="#0b0b0c">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Entreno">
+  <meta name="apple-mobile-web-app-title" content="Athlos">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="preload" href="fonts/baloo2-800.woff" as="font" type="font/woff" crossorigin>
-  <link rel="preload" href="fonts/nunito-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/anton-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="css/app.css">
   <link rel="stylesheet" href="css/tema.css">
 </head>
 <body>
+  <div id="splash" aria-hidden="true"><svg viewBox="0 0 100 100" aria-hidden="true"><rect x="22" y="16" width="56" height="9" rx="1.5" fill="#d4ff3a"/><rect x="22" y="69" width="56" height="9" rx="1.5" fill="#d4ff3a"/><g fill="#fff"><rect x="28" y="30" width="9" height="34" rx="1.5"/><rect x="45.5" y="30" width="9" height="34" rx="1.5"/><rect x="63" y="30" width="9" height="34" rx="1.5"/></g><path d="M20 90h12v-6h-6v-3h10v9h12v-6h-6v-3h10v9h12v-6h-6v-3h10v9h12" fill="none" stroke="#d4ff3a" stroke-width="2.6"/></svg><b>ATH<em>LOS</em></b><span>Enciende tu mejor versión</span></div>
   <main id="main"></main>
 
   <div id="timer" role="timer" aria-live="polite">
@@ -55,5 +56,12 @@
   <script src="js/anim3d.js"></script>
   <script src="js/anim_extra.js"></script>
   <script src="js/app.js"></script>
+  <script>
+    // pantalla de bienvenida: se va sola apenas la app está lista
+    window.addEventListener('load', () => setTimeout(() => {
+      const sp = document.getElementById('splash');
+      if (sp) { sp.classList.add('fuera'); setTimeout(() => sp.remove(), 600); }
+    }, 650));
+  </script>
 </body>
 </html>

@@ -1,17 +1,30 @@
 {
-  "name": "Mi Entrenamiento",
-  "short_name": "Entreno",
-  "description": "Plan de entrenamiento en casa: rutina, técnica, registro y progreso.",
+  "name": "Athlos",
+  "short_name": "Athlos",
+  "description": "Athlos · Enciende tu mejor versión. Plan de entrenamiento, técnica, alimentación y progreso.",
   "lang": "es",
   "start_url": "./index.html#/hoy",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0a0a0b",
-  "theme_color": "#0a0a0b",
+  "background_color": "#0b0b0c",
+  "theme_color": "#0b0b0c",
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }
