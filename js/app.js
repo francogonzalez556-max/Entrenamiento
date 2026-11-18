@@ -528,6 +528,32 @@ let stops = [];
 let planOffset = 0;
 let ejSel = null;
 
+/* Pulido visual (v1.27): emoji inicial de los títulos → ficha de color; avisos largos → plegables con "ver más" */
+const EMOJI_INI = /^(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic}|[\u{1F3FB}-\u{1F3FF}])*)\s*/u;
+function pulirVista(root) {
+  root.querySelectorAll('.card > h3, .card > b:first-child, .row-link > span:first-child').forEach((el, i) => {
+    if (el.classList.contains('row-link') || el.querySelector('.ico-chip')) return;
+    if (el.matches('.row-link > span:first-child')) { if (EMOJI_INI.test(el.textContent.trim())) el.classList.add('ico-chip', 'c' + (i % 6)); return; }
+    const n = el.firstChild;
+    if (!n || n.nodeType !== 3) return;
+    const m = n.textContent.match(EMOJI_INI);
+    if (!m) return;
+    n.textContent = n.textContent.slice(m[0].length);
+    const sp = document.createElement('span');
+    sp.className = 'ico-chip c' + (i % 6); sp.textContent = m[1];
+    el.insertBefore(sp, n);
+    el.classList.add('con-ico');
+  });
+  // las señales de alerta (🚩) y los recursos de ayuda nunca se pliegan: deben leerse completos
+  root.querySelectorAll('.hint, .alerta, .card.warnc, .infobanner').forEach((el) => {
+    if (el.textContent.trim().length < 190 || el.querySelector('form, input, select, textarea, [data-act="alertaok"]') || /4141|131|Salud Responde/.test(el.textContent)) return;
+    el.classList.add('plegable');
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'ver-mas'; b.textContent = 'Ver más';
+    b.addEventListener('click', (e) => { e.stopPropagation(); const ab = el.classList.toggle('abierto'); b.textContent = ab ? 'Ver menos' : 'Ver más'; });
+    el.appendChild(b);
+  });
+}
 function header(title, back) {
   return `<header class="top">${back ? `<a href="${back}" class="back" aria-label="Volver">‹</a>` : ''}<h1>${title}</h1></header>`;
 }
@@ -700,9 +726,22 @@ function vHoy() {
     return `<a class="wd ${ok ? 'ok' : ''} ${d === t ? 'now' : ''}" href="#/sesion/${d <= t ? t : d}/${s}"><b>${DIAS[diaDe(s, semana)].slice(0, 3)}</b><span>${ok ? '✓' : PL.ses[s].nombre.split(' ')[0]}</span></a>`;
   }).join('');
 
-  return `${header(p.nombre ? `¡A darle, ${esc(p.nombre.split(' ')[0])}! 🔥` : '¡A darle! 🔥')}
+  // portada: lo primero que se ve es el entrenamiento de hoy y cómo va la semana
+  const hechas = wi.antes ? 0 : ordenSemana(semana).filter((s2) => doneEnSemana(semana, s2)).length, totS = PL.orden.length || 1;
+  const stHoy = wi.antes ? 'antes' : sid ? (getLog(t, sid)?.done ? 'done' : getLog(t, sid) ? 'prog' : 'new') : 'rest';
+  const frase = { antes: 'Ya casi empezamos', done: '¡Misión de hoy cumplida!', prog: 'Vas a medio camino', new: 'Hoy toca moverse', rest: 'Hoy toca recuperar' }[stHoy];
+  const rc = 30, circ = 2 * Math.PI * rc, pct = Math.min(1, hechas / totS);
+  const hero = `<header class="hero hero-${stHoy}">
+    <div class="hero-top">
+      <div class="hero-txt"><span class="hero-hola">${p.nombre ? `Hola, ${esc(p.nombre.split(' ')[0])}` : 'Hola'} 👋</span><h1>${frase}</h1></div>
+      ${wi.antes ? '' : `<div class="ring" role="img" aria-label="${hechas} de ${totS} sesiones esta semana"><svg viewBox="0 0 72 72"><circle cx="36" cy="36" r="${rc}" class="ring-f"/><circle cx="36" cy="36" r="${rc}" class="ring-a" stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${(circ * (1 - pct)).toFixed(1)}"/></svg><b>${hechas}/${totS}</b><span>semana</span></div>`}
+    </div>
+    ${wi.antes ? '' : nivelHTML()}
+    <div class="hero-chips">${rachasV && rachasV.entreno ? `<span class="hc hc-fuego">🔥 ${rachasV.entreno} ${rachasV.entreno === 1 ? 'día' : 'días'}</span>` : ''}<span class="hc">Semana ${wi.antes ? 0 : wi.wk}${wi.ciclo > 1 ? ` · ciclo ${wi.ciclo}` : ''} de 12</span><span class="hc">Fase ${wi.phase}: ${FASES[wi.phase - 1].nombre}</span>${wi.deload ? '<span class="hc hc-warn">Semana de descarga</span>' : ''}</div>
+    ${main}
+  </header>`;
+  return `${hero}
   <section class="wrap">
-    <div class="weekline"><span class="pill">Semana ${wi.antes ? 0 : wi.wk}${wi.ciclo > 1 ? ` · ciclo ${wi.ciclo}` : ''} de 12</span><span class="pill soft">Fase ${wi.phase}: ${FASES[wi.phase - 1].nombre}</span>${wi.deload ? '<span class="pill warn">Semana de descarga</span>' : ''}</div>
     ${enfoqueActivo(p) ? `<a class="card row-link enfoque" href="#/enfoque"><span>🎯</span><div class="grow"><b>Enfoque: ${nombresEnf(enfoqueActivo(p).areas)}</b><span class="small muted">Hasta el ${fmt(enfoqueActivo(p).hasta)} · quedan ${dayDiff(t, enfoqueActivo(p).hasta) + 1} días</span></div>›</a>`
       : p.enfoques && !p.enfoques.avisado ? '<a class="card row-link nuevo" href="#/enfoque"><span>🎯</span><div class="grow"><b>Tu enfoque terminó</b><span class="small muted">Tu plan volvió a la normalidad. ¿Elegir otro?</span></div>›</a>' : ''}
     ${S.acceso?.tipo === 'invitado' && dayDiff(t, S.acceso.vence) <= 5 ? `<div class="card warnc"><b>🔑 Tu acceso vence ${dayDiff(t, S.acceso.vence) === 0 ? 'hoy' : `en ${dayDiff(t, S.acceso.vence)} días`}</b><p class="small">Exporta un respaldo y pide un link nuevo a quien te invitó para continuar.</p></div>` : ''}
@@ -716,7 +755,6 @@ function vHoy() {
     ${!wi.antes ? bienestarHTML(t) : ''}
     ${animoBajoDias(t) >= 3 ? ayudaHTML('Marcaste ánimo bajo varios días esta semana. Si te sientes así seguido, no tienes que pasarlo solo/a.') : ''}
     ${alertasHTML(alNut, true)}
-    ${main}
     ${!wi.antes ? premioHTML(premioEstado(t)) : ''}
     ${rachasV ? rachasHTML(rachasV) : ''}
     <div class="card"><h3>Esta semana</h3><div class="weekdots" style="grid-template-columns:repeat(${PL.orden.length},1fr)">${dots}</div>
@@ -2255,7 +2293,7 @@ function vMas() {
     ${ayudaHTML('')}
     <div class="card small-card"><h3>ℹ️ Importante</h3><p class="small">Esta app orienta y educa con criterios de entrenamiento, nutrición y kinesiología basados en evidencia, pero <b>no reemplaza la evaluación de un médico, nutricionista, kinesiólogo o psicólogo</b>. Ante dudas sobre tu salud, consulta a un profesional.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">v1.26 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">v1.27 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 
@@ -2352,6 +2390,7 @@ function route() {
     default: v = 'hoy'; html = vHoy();
   }
   main.innerHTML = html;
+  pulirVista(main);
   if (GPS && v !== 'gps') main.insertAdjacentHTML('afterbegin', gpsBannerHTML());
   if (v !== 'comida') comidaDia = null;
   if (v !== 'rutina') rDraft = null;

@@ -171,3 +171,37 @@ function premioHTML(e) {
       ${comida ? '<button class="btn small-btn ghost" data-act="premiootro">Prefiero otro premio</button>' : `<button class="btn small-btn ghost" data-act="premiootro">Otra idea</button>`}
       <button class="link small" data-act="premiono">Ahora no</button></div></div></div>`;
 }
+
+/* ---------- Niveles (v1.27) ----------
+   La experiencia premia moverse y registrar: sesiones, series, deportes, caminatas y días con comidas
+   anotadas. Nunca premia comer menos ni bajar de peso más rápido. */
+const NIVELES = [
+  [0, 'Principiante'], [300, 'En marcha'], [800, 'Constante'], [1500, 'Decidido'], [2500, 'Fuerte'],
+  [4000, 'Imparable'], [6000, 'Atleta'], [8500, 'Élite'], [11500, 'Campeón'], [15000, 'Leyenda'],
+];
+function xpTotal() {
+  let xp = 0;
+  for (const l of Object.values(S.logs || {})) {
+    if (!l.done) continue;
+    xp += 100;
+    for (const e of Object.values(l.ex || {})) xp += Math.min(12, (e.sets || []).filter((x) => x.ok).length) * 4;
+    xp += Object.values(l.cardio || {}).filter((c) => c.ok).length * 15;
+  }
+  xp += (S.deportes || []).length * 60 + (S.caminatas || []).length * 25;
+  xp += Object.values(S.comidas || {}).filter((d) => (d || []).length >= 2).length * 20;
+  xp += (S.pesos || []).length * 5;
+  return xp;
+}
+function nivelActual(xp = xpTotal()) {
+  let i = 0;
+  while (i + 1 < NIVELES.length && xp >= NIVELES[i + 1][0]) i++;
+  const desde = NIVELES[i][0], hasta = NIVELES[i + 1] ? NIVELES[i + 1][0] : null;
+  return { n: i + 1, nombre: NIVELES[i][1], xp, desde, hasta, pct: hasta ? (xp - desde) / (hasta - desde) : 1 };
+}
+function nivelHTML() {
+  const N = nivelActual();
+  if (!S.nivelVisto) S.nivelVisto = N.n; // el nivel que ya tenías no se celebra como si fuera nuevo
+  return `<div class="nivel" aria-label="Nivel ${N.n}: ${N.nombre}"><span class="nv-b">⭐ ${N.n}</span>
+    <div class="nv-t"><b>${N.nombre}</b><span>${N.hasta ? `${(N.hasta - N.xp).toLocaleString('es-CL')} XP para el nivel ${N.n + 1}` : '¡Nivel máximo!'}</span>
+    <div class="nv-bar"><i style="width:${Math.round(N.pct * 100)}%"></i></div></div></div>`;
+}

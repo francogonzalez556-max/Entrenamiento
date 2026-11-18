@@ -100,7 +100,13 @@ function celebrarSesion(lg, incompleta) {
     R.kg >= 50 ? stat(R.kg.toLocaleString('es-CL'), 'kg levantados') : '',
     R.prs ? stat(R.prs, R.prs === 1 ? 'récord nuevo' : 'récords nuevos') : '',
   ].filter(Boolean).slice(0, 4).join('');
+  let subio = null;
+  try {
+    const N = nivelActual();
+    if ((S.nivelVisto || 1) < N.n) { subio = N; S.nivelVisto = N.n; save(); } else if (!S.nivelVisto) { S.nivelVisto = N.n; save(); }
+  } catch (e) { /* sin niveles */ }
   const extra = [
+    subio ? `<span class="fz-nivel">⭐ ¡Subiste a nivel ${subio.n}: ${subio.nombre}!</span>` : '',
     `Sesión n.º <b>${R.nSes}</b>${R.racha >= 2 ? ` · racha de <b>${R.racha}</b> días entrenando` : ''}`,
     incompleta ? 'No la terminaste completa, y está bien: lo que hiciste hoy también suma.' : '',
   ].filter(Boolean).map((t) => `<p>${t}</p>`).join('');
