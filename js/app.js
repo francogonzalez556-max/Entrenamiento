@@ -796,7 +796,7 @@ function vSesion(date, sid) {
   const lg = getLog(date, sid, false);
   const items0 = itemsDe(sid, wi, date);
   // sesión dividida: mañana silenciosa + tarde
-  const items = tandasActivas(lg) && !lg?.done ? dividirTandas(items0, minManana(lg)) : items0;
+  const items = tandasActivas(lg) && !lg?.done ? dividirTandas(items0, minManana(lg), modoTandas(lg)) : items0;
   const fz = fcZonas();
   const aj = getRutina(sid) ? { msgs: [], factor: 1, zonaFactor: {} } : ajusteSesion(date, sid);
   const desc = wi.deload || !!(S.descargas || {})[wi.week];
@@ -2312,7 +2312,7 @@ function vMas() {
     ${ayudaHTML('')}
     <div class="card small-card"><h3>ℹ️ Importante</h3><p class="small">Esta app orienta y educa con criterios de entrenamiento, nutrición y kinesiología basados en evidencia, pero <b>no reemplaza la evaluación de un médico, nutricionista, kinesiólogo o psicólogo</b>. Ante dudas sobre tu salud, consulta a un profesional.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">Athlos v1.33 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">Athlos v1.34 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 
@@ -3407,7 +3407,7 @@ function init() {
   main.addEventListener('change', (e) => {
     const el = e.target;
     if (el.dataset.actChange === 'ejsel') { ejSel = el.value; rerender(); }
-    if (el.dataset.actChange === 'tandasiempre') { const lg = getLog(ctx.date, ctx.sid, true); S.ajustes = { ...(S.ajustes || {}), tandas: { ...tandasCfg(), on: el.checked, min: minManana(lg) } }; lg.tandas = true; save(true); toast(el.checked ? '🌓 Tus sesiones se dividirán en 2 tandas' : 'Las próximas sesiones serán de una sola tanda'); }
+    if (el.dataset.actChange === 'tandasiempre') { const lg = getLog(ctx.date, ctx.sid, true); S.ajustes = { ...(S.ajustes || {}), tandas: { ...tandasCfg(), on: el.checked, min: minManana(lg), modo: modoTandas(lg) } }; lg.tandas = true; save(true); toast(el.checked ? '🌓 Tus sesiones se dividirán en 2 tandas' : 'Las próximas sesiones serán de una sola tanda'); }
     if (el.dataset.actChange === 'planfav') { S.ajustes = { ...(S.ajustes || {}), planFav: el.checked }; save(true); openModal('🧭 Un día de ejemplo', planHTML()); }
     if (el.dataset.bandera) {
       const lg = getLog(ctx.date, ctx.sid, true), id = el.dataset.bandera;
