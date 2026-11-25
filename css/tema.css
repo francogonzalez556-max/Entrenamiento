@@ -247,3 +247,6 @@ body { padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
 @media (prefers-reduced-motion: reduce) {
   .hero, .wrap > *, .chk.on, #nav a svg, .ring-a, #splash, #splash * { animation: none !important; transition: none !important; }
 }
+
+/* pesas y barras en gris acero (no se confunden con la polera verde) */
+.fig, .fig.mujer { --acc: #b9bdc8; }

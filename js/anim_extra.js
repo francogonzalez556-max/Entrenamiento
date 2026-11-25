@@ -604,3 +604,98 @@
     if (EJERCICIOS[id]) EJERCICIOS[id].anim = id;
   }
 })();
+
+/* ============================================================
+   AJUSTES BIOMECÁNICOS (v1.29)
+   Revisados con un medidor automático de ángulos en 3D (pruebas/biomec.py):
+   - rodillas y codos que se doblaban hacia el lado imposible
+   - ángulos que "daban la vuelta larga" entre dos poses (ej. -92 → 268)
+   - codos doblados más de ~150° (antebrazo pegado al brazo)
+   - presses con el codo abierto hacia el costado (o), como en la realidad
+   - partes del cuerpo que atravesaban el suelo
+   ============================================================ */
+(() => {
+  const F = (id) => ANIMS[id] && ANIMS[id].frames;
+  // marcha: la pierna de atrás queda levemente doblada (antes se doblaba 25° hacia adelante)
+  for (const id of ['caminata', 'trotadora', 'paseo_granjero', 'paseo_maleta', 'paseo_arriba']) {
+    for (const f of F(id) || []) for (const l of ['n', 'f']) if (f.leg && f.leg[l] && f.leg[l].a && f.leg[l].a[0] === 110) f.leg[l].a = [110, 118];
+  }
+  // curl: arriba el codo queda en ~145° (no pegado al brazo)
+  if (F('curl_biceps')) F('curl_biceps')[1].arm.n.a = [96, -49];
+  // goblet y sentadilla a silla: mancuerna al pecho con el codo en ~140°
+  for (const id of ['sentadilla_goblet', 'sentadilla_cajon']) if (ANIMS[id]) ANIMS[id].base.arm = { n: { a: [62, -78] } };
+  // bench y press en el suelo: los codos se abren hacia los costados al bajar (no atraviesan el banco)
+  for (const id of ['press_banca', 'press_banca_mancuernas']) if (F(id)) {
+    // abajo: brazo apuntando arriba pero inclinado >90° hacia el costado (codo abierto, levemente bajo el pecho); el antebrazo siempre vertical
+    F(id)[0].arm = { n: { a: [270, 270], o: [100, 0] } }; F(id)[1].arm = { n: { a: [270, 270], o: [0, 0] } };
+  }
+  if (F('press_suelo')) { F('press_suelo')[0].arm = { n: { a: [270, 270], o: [96, 0] } }; F('press_suelo')[1].arm = { n: { a: [270, 270], o: [0, 0] } }; }
+  for (const id of ['press_inclinado_mancuernas', 'press_inclinado_barra']) if (F(id)) {
+    F(id)[0].arm = { n: { a: [276, 276], o: [98, 0] } }; F(id)[1].arm = { n: { a: [276, 276], o: [0, 0] } };
+  }
+  // barra sobre la espalda (sentadilla con barra, buenos días): codos abiertos hacia abajo y atrás
+  for (const id of ['sentadilla_barra', 'buenos_dias']) if (ANIMS[id]) ANIMS[id].base.arm = { n: { a: [125, -70], o: [62, 0] } };
+  // press de pecho de pie / en máquina y remo de pie: codo abierto, sin plegarse de más
+  for (const id of ['press_pecho_banda', 'press_pecho_maquina']) if (F(id)) F(id)[0].arm = { n: { a: [165, 28], o: [50, -22] } };
+  if (F('remo_banda_pie')) F('remo_banda_pie')[1].arm = { n: { a: [165, 28], o: [35, -18] } };
+  // thruster: posición de rack con el codo en ~140°
+  if (F('thruster')) F('thruster')[0].arm = { n: { a: [55, -85] } };
+  // hiperextensión: brazos cruzados sobre el pecho sin plegar de más
+  if (F('hiperextension')) { F('hiperextension')[0].arm = { n: { a: [120, -20] } }; F('hiperextension')[1].arm = { n: { a: [24, -110] } }; }
+  // puentes: brazos estirados en el suelo a los costados
+  for (const id of ['puente', 'puente_isquios', 'puente_una_pierna']) for (const f of F(id) || []) f.arm = { n: { a: [4, 2] } };
+  // curl femoral: manos tomadas de las manillas con los brazos estirados
+  if (ANIMS.curl_femoral_maquina) ANIMS.curl_femoral_maquina.base.arm = { n: { a: [132, 132] } };
+  // hip thrust: el tronco subía "dando la vuelta" a través de las piernas (-138 → 180); ahora 222 → 180
+  if (F('hip_thrust_banco')) {
+    F('hip_thrust_banco')[0].torso = 222;
+    // las manos sujetan la barra sobre la cadera (antes colgaban hacia atrás del banco)
+    F('hip_thrust_banco')[0].arm = { n: { ik: [106, 141], bend: 1 } };
+    F('hip_thrust_banco')[1].arm = { n: { ik: [120, 105], bend: 1 } };
+  }
+  // patada de glúteo: la canilla giraba por el lado imposible (180 → -92); ahora 180 → 268
+  if (F('patada_gluteo')) F('patada_gluteo')[1].leg.n.a = [192, 268];
+  // Y-T-W: los brazos ya no pasan por debajo del suelo entre letras
+  if (F('ytw')) { F('ytw')[1].arm.n.a = [270, 270]; F('ytw')[2].arm.n = { a: [350, 250], o: [55, 60] }; }
+  // escaladores: la rodilla sube al pecho sin que el pie atraviese el suelo
+  if (F('escaladores')) {
+    // al cambiar de pierna la cadera sube un poco y las rodillas pasan dobladas bajo el cuerpo (los pies no tocan el suelo)
+    const H = [105, 133], M = [105, 124];
+    ANIMS.escaladores.frames = [
+      { hip: H, leg: { n: { a: [40, 170] }, f: { a: [156, 156] } }, hold: 60 },
+      { hip: M, leg: { n: { a: [100, 205] }, f: { a: [100, 205] } }, hold: 0 },
+      { hip: H, leg: { n: { a: [156, 156] }, f: { a: [40, 170] } }, hold: 60 },
+      { hip: M, leg: { n: { a: [100, 205] }, f: { a: [100, 205] } }, hold: 0 },
+    ];
+    ANIMS.escaladores.dur = 190; ANIMS.escaladores.base.footN = 22; ANIMS.escaladores.base.footF = 22;
+  }
+  // boxeo: guardia con los puños en el mentón (codo en ~145°)
+  for (const f of F('boxeo_sombra') || []) for (const l of ['n', 'f']) if (f.arm[l].a[0] === 112) f.arm[l].a = [78, -60];
+  // plancha con toque de hombro: la mano va al hombro contrario sin doblar el codo al revés
+  for (const f of F('plancha_toque_hombros') || []) for (const l of ['n', 'f']) if (f.arm[l] && f.arm[l].a && f.arm[l].a[0] === 104) f.arm[l] = { a: [100, -58], o: [12, -58] };
+  // crunch en polea: manos junto a la cabeza sujetando la cuerda
+  if (F('crunch_polea')) { F('crunch_polea')[0].arm = { n: { a: [-58, 175] } }; F('crunch_polea')[1].arm = { n: { a: [40, 265] } }; }
+  // burpees: en el salto los brazos se estiran sobre la cabeza (sin plegar el codo)
+  const bur = F('burpees'); if (bur) bur[bur.length - 1].arm = { n: { ik: [140, 0], bend: 1 } };
+  for (const id of ['burpees', 'burpee_sin_salto']) { const f0 = F(id) && F(id)[0]; if (f0) f0.arm = { n: { ik: [124, 92], bend: 1 } }; }
+  for (const id of ['burpees', 'burpee_sin_salto']) for (const f of F(id) || []) { if (f.torso === -24) f.torso = -30; if (f.leg && f.leg.n && f.leg.n.ik && f.leg.n.ik[0] === 114) f.footN = 0; if (f.leg && f.leg.n && f.leg.n.ik && f.leg.n.ik[0] === 30) f.footN = 22; }
+  // rotación torácica: el brazo pasa bajo el pecho y luego se abre estirado hacia el techo
+  if (F('rotacion_toracica')) {
+    ANIMS.rotacion_toracica.frames = [
+      { arm: { n: { a: [96, 96], o: [-38, -38] } }, hold: 300 },
+      { arm: { n: { a: [90, 90], o: [70, 70] } }, hold: 0 },
+      { arm: { n: { a: [-88, -88], o: [12, 12] } }, hold: 500 },
+      { arm: { n: { a: [90, 90], o: [70, 70] } }, hold: 0 },
+    ];
+    if (EJERCICIOS.rotacion_toracica) EJERCICIOS.rotacion_toracica.pasos = ['En 4 apoyos, pasa un brazo estirado por debajo del pecho hacia el otro lado', 'Gira el tronco y abre ese brazo hacia el techo, siguiéndolo con la mirada', 'Vuelve lento; completa las repeticiones y cambia de lado'];
+  }
+  // remo ergómetro y prensa: menos flexión de cadera en el punto más cerrado
+  if (F('remo_ergometro')) F('remo_ergometro')[0].torso = -74;
+  if (F('prensa')) F('prensa')[1].leg.n.ik = [146, 80];
+  // zancada lateral: la rodilla que se dobla apunta hacia adelante, no hacia el costado
+  if (F('zancada_lateral')) F('zancada_lateral')[1].leg = { a: [60, 95], s: [0.75, 0.8] };
+  // almeja: el brazo de abajo sostiene la cabeza sin atravesar el suelo
+  if (ANIMS.almeja) ANIMS.almeja.base.armL = { a: [-95, -150], s: [1, 1] };
+  // gato-vaca: la cadera no baja más allá de las rodillas
+  if (F('gato_vaca')) F('gato_vaca')[1].hip = [88, 126];
+})();

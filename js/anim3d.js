@@ -1009,5 +1009,5 @@ const Fig3D = (() => {
     return ordenar(E, pr).map((u) => ({ n: u.n, ps: u.ps.map(([a, b, r]) => [a, b, r]) }));
   }
 
-  return { mount, still, mini, enT, diag, segSeg, VISTAS, usarGL, _gl: GLX, _esc: (a, pose, musc) => escena(a, pose, pivote(a), musc) };
+  return { mount, still, mini, enT, diag, segSeg, VISTAS, usarGL, _gl: GLX, _esc: (a, pose, musc) => escena(a, pose, pivote(a), musc), _cuerpo: (a, pose) => cuerpo(a, pose, pivote(a)) };
 })();
