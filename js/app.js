@@ -749,6 +749,7 @@ function vHoy() {
   </header>`;
   return `${hero}
   <section class="wrap">
+    ${resumenHoyHTML()}
     ${enfoqueActivo(p) ? `<a class="card row-link enfoque" href="#/enfoque"><span>🎯</span><div class="grow"><b>Enfoque: ${nombresEnf(enfoqueActivo(p).areas)}</b><span class="small muted">Hasta el ${fmt(enfoqueActivo(p).hasta)} · quedan ${dayDiff(t, enfoqueActivo(p).hasta) + 1} días</span></div>›</a>`
       : p.enfoques && !p.enfoques.avisado ? '<a class="card row-link nuevo" href="#/enfoque"><span>🎯</span><div class="grow"><b>Tu enfoque terminó</b><span class="small muted">Tu plan volvió a la normalidad. ¿Elegir otro?</span></div>›</a>' : ''}
     ${S.acceso?.tipo === 'invitado' && dayDiff(t, S.acceso.vence) <= 5 ? `<div class="card warnc"><b>🔑 Tu acceso vence ${dayDiff(t, S.acceso.vence) === 0 ? 'hoy' : `en ${dayDiff(t, S.acceso.vence)} días`}</b><p class="small">Exporta un respaldo y pide un link nuevo a quien te invitó para continuar.</p></div>` : ''}
@@ -1013,6 +1014,7 @@ function vProgreso() {
       <div><b>${rch.mejor}</b><span>mejor racha</span></div>
       <div><b>${Object.values(S.logs).filter((l) => l.done).length}</b><span>sesiones</span></div>
     </div>
+    ${resumenProgresoHTML()}
     <div class="card"><h3>⚖️ Peso corporal</h3>
       <div class="stats inner">
         <div><b>${perd > 0 ? '−' : perd < 0 ? '+' : ''}${fmtN(Math.abs(perd))}</b><span>kg desde el inicio</span></div>
@@ -1034,13 +1036,14 @@ function vProgreso() {
       ${cams.length ? `<details><summary class="small">Ver registros</summary><ul class="plist">${cams.map((c) => `<li><span>${fmt(c.fecha)}</span><b>${resumenCam([c])}</b><button class="link danger" data-act="delcam" data-id="${c.id}" aria-label="Eliminar">✕</button></li>`).join('')}</ul></details>` : ''}
     </div>
     ${deportesProgresoHTML()}
-    <div class="card"><h3>🏋️ Fuerza</h3>${ejChart}${recordsHTML(L)}<p class="small muted">Volumen total levantado: <b>${Math.round(vol).toLocaleString('es-CL')} kg</b></p></div>
+    <div class="card"><h3>🏋️ Fuerza</h3>${ejChart}${mejorasFuerzaHTML(L)}${recordsHTML(L)}<p class="small muted">Volumen total levantado: <b>${Math.round(vol).toLocaleString('es-CL')} kg</b></p></div>
     ${volumenHTML(L, cur)}
     ${medidasHTML(t)}
-    ${menor ? '' : `<div class="card"><h3>📸 Fotos de progreso</h3>
+    ${menor ? '' : `<${riesgoAlim() ? 'details' : 'div'} class="card"><${riesgoAlim() ? 'summary' : 'h3'}>📸 Fotos de progreso</${riesgoAlim() ? 'summary' : 'h3'}>
+      ${riesgoAlim() ? '<p class="small muted">Las dejamos plegadas por ahora: con los avisos de alimentación que tienes activos, es mejor fijarte en tu energía, tu fuerza y cómo te sientes, más que en tu imagen.</p>' : ''}
       <div class="inline"><select id="fpose" aria-label="Pose"><option>Frente</option><option>Lado</option><option>Espalda</option></select><label class="btn primary">+ Foto<input type="file" accept="image/*" id="ffoto" hidden></label></div>
       <div id="fotos" class="fotos"><p class="small muted">Cargando…</p></div>
-      <p class="small muted">Las fotos quedan solo en este teléfono y <b>no se incluyen en el respaldo</b>. Para guardarlas aparte, ábrelas y usa "Compartir".</p></div>`}
+      <p class="small muted">Las fotos quedan solo en este teléfono y <b>no se incluyen en el respaldo</b>. Para guardarlas aparte, ábrelas y usa "Compartir". Ábrelas para compararlas lado a lado con otra fecha.</p></${riesgoAlim() ? 'details' : 'div'}>`}
     <div class="card"><h3>🦵 Dolor y molestias</h3>${dolorCharts}<p class="small muted">Lo ideal es que la tendencia baje con las semanas. 🟡 = la app baja la carga de esa zona; 🔴 = cambia los ejercicios que la cargan. Si sigue en 🔴 o no mejora en 2-3 semanas, consulta a un kinesiólogo.</p></div>
   </section><div id="modal" class="sheet"></div>`;
 }
@@ -1226,8 +1229,9 @@ const foodBtn = (a) => `<button class="fres-i" data-act="pickfood" data-id="${es
 function resultadosHTML(q) {
   const r = buscar(q), multi = multiBtnHTML(q);
   if (r) return multi + (r.length ? r.map(foodBtn).join('') : multi ? '' : `<p class="muted small">No encontré "${esc(q)}". Prueba con otra palabra o créalo abajo.</p>`);
-  const rec = recientes();
-  let h = rec.length ? `<p class="fres-h">Recientes</p>${rec.map(foodBtn).join('')}` : '';
+  const favs = S.favAlim || [], rec = recientes().filter((a) => !favs.some((x) => x.n === a.n));
+  let h = favs.length ? `<p class="fres-h">⭐ Favoritos</p>${favs.map(foodBtn).join('')}` : '';
+  h += rec.length ? `<p class="fres-h">Recientes</p>${rec.map(foodBtn).join('')}` : '';
   const preps = S.propios.filter((a) => a.rec), mios = S.propios.filter((a) => !a.rec);
   if (preps.length) h += `<p class="fres-h">Mis preparaciones</p>${preps.map(foodBtn).join('')}`;
   if (mios.length) h += `<p class="fres-h">Mis alimentos</p>${mios.map(foodBtn).join('')}`;
@@ -1514,7 +1518,7 @@ function sheetHTML() {
         <div class="chips">${[0.5, 1, 1.5, 2, 3].map((x) => `<button class="tab ${x === q ? 'on' : ''}" data-act="qset" data-q="${x}">${String(x).replace('.', ',')}</button>`).join('')}</div>
         <p class="prev" id="fprev">${prevTxt(f, q)}</p>`;
     const sinGr = !f.gp && !f.rec && S.propios.some((x) => x.id === f.id);
-    body = `<div class="pick"><b class="pick-n">${esc(f.n)}</b><span class="muted small">Porción: ${esc(f.p)} = ${f.k} kcal${f.gp ? ` · ${fmtN(f.gp)} ${u}` : ''}</span>
+    body = `<div class="pick"><div class="pick-top"><b class="pick-n">${esc(f.n)}</b>${f.rec ? '' : `<button class="favbtn ${esFav(f) ? 'on' : ''}" data-act="favtoggle" aria-label="${esFav(f) ? 'Quitar de favoritos' : 'Marcar como favorito'}" aria-pressed="${esFav(f)}">${esFav(f) ? '★' : '☆'}</button>`}</div><span class="muted small">Porción: ${esc(f.p)} = ${f.k} kcal${f.gp ? ` · ${fmtN(f.gp)} ${u}` : ''}</span>
       ${f.fuente ? `<span class="small muted fuente-fr">${/^estimado/.test(f.fuente) ? '≈ Valor estimado: la cadena no publica su información nutricional' : /Chile/.test(f.fuente) ? '✓ Dato oficial de la cadena en Chile' : /USDA/.test(f.fuente) ? 'Dato del USDA (análisis de laboratorio, EE.UU.)' : `Dato oficial de la cadena (${esc(f.fuente.replace('oficial ', ''))}); en Chile puede variar`}</span>` : ''}
       ${sinGr ? `<div class="gpfix"><span class="small">⚖️ Para anotarlo en gramos, indica cuánto pesa 1 porción (${esc(f.p)}):</span><div class="gpfix-r"><input id="gpfix" type="text" inputmode="decimal" placeholder="ej: 250"><span class="qu">${u}</span><button class="btn small-btn" data-act="gpfix">Guardar</button></div></div>` : ''}
       ${modo}${ctrl}
@@ -1698,7 +1702,7 @@ function vComida() {
     const prev = diaComidas(ayer).filter((x) => x.m === m);
     return `<div class="card meal-c"><div class="mh"><h3>${ico} ${nom}</h3><b>${oc ? `${Math.round(tt.pr)} g prot.` : `${Math.round(tt.k)} kcal`}</b></div>
       ${its.map((x) => `<div class="fi"><div class="grow tap" data-act="editfood" data-id="${x.id}"><b>${x.gr ? '' : fmtQ(x.q)}${esc(x.f.n)}</b><span class="small muted">${x.gr ? `${fmtN(x.gr)} ${x.f.u || 'g'}` : esc(x.f.p)} · ${Math.round(x.f.pr * x.q)} g prot.</span></div><span>${oc ? '' : Math.round(x.f.k * x.q)}</span><button class="link danger" data-act="delfood" data-id="${x.id}" aria-label="Quitar">✕</button></div>`).join('')}
-      <div class="btns"><button class="btn small-btn" data-act="opensheet" data-m="${m}">+ Agregar</button>${!its.length && prev.length ? `<button class="btn ghost small-btn" data-act="repetir" data-m="${m}">↺ Repetir de ayer${oc ? '' : ` (${Math.round(totales(prev).k)} kcal)`}</button>` : ''}</div></div>`;
+      <div class="btns"><button class="btn small-btn" data-act="opensheet" data-m="${m}">+ Agregar</button>${!its.length && prev.length ? `<button class="btn ghost small-btn" data-act="repetir" data-m="${m}">↺ Repetir de ayer${oc ? '' : ` (${Math.round(totales(prev).k)} kcal)`}</button>` : ''}${combosChipsHTML(m, its, oc)}</div></div>`;
   }).join('');
   const labs = [], vals = [];
   for (let i = 13; i >= 0; i--) {
@@ -1730,6 +1734,8 @@ function vComida() {
     ${alertasHTML(alNut)}
     ${deporteComidaHTML(d)}
     ${!alNut.suficiente ? `<p class="small muted center">Los avisos de alimentación se activan con 5 días completos (2 o más comidas anotadas) en las últimas 2 semanas. Llevas ${alNut.completos}.</p>` : ''}
+    ${plannerCardHTML()}
+    ${copiarDiaHTML(d, items, oc)}
     ${meals}
     ${calidadHTML(d)}
     ${aguaHTML(d)}
@@ -1741,7 +1747,7 @@ function vComida() {
     <h2 class="sec">Claves</h2>
     ${consejosComida(o).map(([ti, de]) => `<details class="card acc"><summary>${ti}</summary><p>${de}</p></details>`).join('')}
     <p class="small muted center">Las calorías son aproximadas (porciones caseras). Para productos envasados, crea el alimento con los datos de la etiqueta. Esta app orienta y educa; no reemplaza la evaluación de un nutricionista.</p>
-  </section><div id="sheet" class="sheet"></div>`;
+  </section><div id="sheet" class="sheet"></div><div id="modal" class="sheet"></div>`;
 }
 
 /* ---- RUTINAS PROPIAS ---- */
@@ -1807,6 +1813,7 @@ function vAlimentos() {
     <p class="small muted">Productos que creaste o escaneaste y tus preparaciones 🍳. Puedes corregir sus valores o eliminarlos; lo que ya registraste en días anteriores no cambia. Las preparaciones se editan desde Comida → + Agregar → elígela → «Ver / editar ingredientes».</p>
     ${L.length ? `<div class="card">${L.map((a) => `<div class="fi"><div class="grow"><b>${a.rec ? '🍳 ' : ''}${esc(a.n)}</b><span class="small muted">${esc(a.p)} · ${a.k} kcal · ${a.pr} g prot.${a.bc ? ' · 🏷️ ' + esc(a.bc) : ''}${a.ingr ? ` · 🍲 ${esc(a.ingr)}` : ''}${a.rec ? ` · ${a.rec.ings.map((i) => esc(i.n + (i.marca ? ' ' + i.marca : ''))).join(', ')}` : ''}</span></div>${a.rec ? '' : `<a class="btn small-btn" href="#/alimento/${a.id}">Editar</a>`}<button class="link danger" data-act="delpropio" data-id="${a.id}" aria-label="Eliminar">✕</button></div>`).join('')}</div>`
       : '<div class="card"><p class="muted">Aún no tienes alimentos propios. Créalos o escanéalos desde Comida → + Agregar.</p></div>'}
+    ${combosAdminHTML()}
   </section>`;
 }
 function vAlimento(id) {
@@ -2300,7 +2307,7 @@ function vMas() {
     ${ayudaHTML('')}
     <div class="card small-card"><h3>ℹ️ Importante</h3><p class="small">Esta app orienta y educa con criterios de entrenamiento, nutrición y kinesiología basados en evidencia, pero <b>no reemplaza la evaluación de un médico, nutricionista, kinesiólogo o psicólogo</b>. Ante dudas sobre tu salud, consulta a un profesional.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">Athlos v1.29 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">Athlos v1.31 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 
@@ -2772,7 +2779,7 @@ const actions = {
   },
   pickfood(btn) {
     const id = btn.dataset.id;
-    sheet.food = todosAlimentos().find((a) => a.id === id) || recientes().find((a) => a.id === id);
+    sheet.food = todosAlimentos().find((a) => a.id === id) || recientes().find((a) => a.id === id) || (S.favAlim || []).find((a) => a.id === id);
     sheet.q = 1;
     sheet.mode = 'u';
     sheet.gr = sheet.food.gp || 100;
@@ -3123,10 +3130,12 @@ const actions = {
   fotover(btn) {
     const id = +btn.dataset.id, fs = window._fotos || [], f = fs.find((x) => x.id === id);
     if (!f) return;
-    const primera = [...fs].filter((x) => x.pose === f.pose).sort((a, b) => a.fecha.localeCompare(b.fecha))[0];
-    const u1 = URL.createObjectURL(f.blob), comp = primera && primera.id !== f.id ? URL.createObjectURL(primera.blob) : null;
+    const misma = [...fs].filter((x) => x.pose === f.pose && x.id !== f.id).sort((a, b) => a.fecha.localeCompare(b.fecha));
+    const primera = misma.find((x) => x.id === +btn.dataset.cmp) || misma[0];
+    const u1 = URL.createObjectURL(f.blob), comp = primera ? URL.createObjectURL(primera.blob) : null;
     fotosURL.push(u1); if (comp) fotosURL.push(comp);
-    openModal(`${f.pose} · ${fmt(f.fecha)}`, `${comp ? `<div class="comp"><figure><img src="${comp}" alt=""><figcaption>${fmt(primera.fecha)} (primera)</figcaption></figure><figure><img src="${u1}" alt=""><figcaption>${fmt(f.fecha)}</figcaption></figure></div>` : `<img class="fotogrande" src="${u1}" alt="">`}
+    openModal(`${f.pose} · ${fmt(f.fecha)}`, `${comp ? `<div class="comp"><figure><img src="${comp}" alt=""><figcaption>${fmt(primera.fecha)}${primera.id === misma[0].id ? ' (primera)' : ''}</figcaption></figure><figure><img src="${u1}" alt=""><figcaption>${fmt(f.fecha)}</figcaption></figure></div>
+      ${misma.length > 1 ? `<p class="small muted mt">Comparar con:</p><div class="chips">${misma.map((x) => `<button class="tab ${x.id === primera.id ? 'on' : ''}" data-act="fotover" data-id="${f.id}" data-cmp="${x.id}">${fmt(x.fecha)}</button>`).join('')}</div>` : ''}` : `<img class="fotogrande" src="${u1}" alt="">`}
       <div class="btns mt"><button class="btn" data-act="fotoshare" data-id="${f.id}">Compartir / guardar</button><button class="btn danger ghost" data-act="fotodel" data-id="${f.id}">Eliminar</button></div>`);
   },
   async fotoshare(btn) {
@@ -3393,6 +3402,7 @@ function init() {
   main.addEventListener('change', (e) => {
     const el = e.target;
     if (el.dataset.actChange === 'ejsel') { ejSel = el.value; rerender(); }
+    if (el.dataset.actChange === 'planfav') { S.ajustes = { ...(S.ajustes || {}), planFav: el.checked }; save(true); openModal('🧭 Un día de ejemplo', planHTML()); }
     if (el.dataset.bandera) {
       const lg = getLog(ctx.date, ctx.sid, true), id = el.dataset.bandera;
       lg.alertas = (lg.alertas || []).filter((x) => x !== id);

@@ -250,3 +250,29 @@ body { padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
 
 /* pesas y barras en gris acero (no se confunden con la polera verde) */
 .fig, .fig.mujer { --acc: #b9bdc8; }
+
+/* ---- v1.30: resumen semanal, mejoras de fuerza, planificador ---- */
+.sem-card { border-left: 4px solid var(--volt); }
+.sem-fecha { font-size: .72rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--mut); margin: 0 0 4px; }
+.sem-frase { font-weight: 700; margin: 0 0 10px; }
+.sem-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.sem-stats div { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; display: flex; flex-direction: column; }
+.sem-stats b { font-family: var(--display); font-weight: 400; font-size: 1.7rem; line-height: 1.05; color: var(--acc-t); }
+.sem-stats span { font-size: .62rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--mut); }
+.mejoras { display: grid; gap: 10px; margin: 6px 0 12px; }
+.mej-h { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.mej-p { font-family: var(--display); font-size: 1.35rem; color: var(--acc-t); }
+.mej-bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; margin: 4px 0 2px; }
+.mej-bar i { display: block; height: 100%; background: var(--volt); border-radius: 4px; }
+.plan-cta { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.plan-m { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; margin: 8px 0; }
+.plan-m .mh { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.plan-l { margin: 6px 0 8px; padding-left: 18px; }
+.plan-l li { margin: 2px 0; }
+.btn.fav { border-color: var(--volt); }
+
+.pick-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.favbtn { background: none; border: 1px solid var(--line); border-radius: 6px; color: var(--mut); font-size: 1.5rem; line-height: 1; padding: 4px 10px; cursor: pointer; }
+.favbtn.on { color: #f5c518; border-color: #f5c518; }
+.fav-tag { font-family: var(--body); font-size: .72rem; font-weight: 700; color: var(--acc-t); margin-left: 4px; }
+.fav-tip { background: var(--bg); border: 1px dashed var(--line); border-radius: 6px; padding: 8px 10px; }
