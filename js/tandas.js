@@ -156,9 +156,9 @@ function tandaItemHTML(it, lg) {
     return `<div class="card blk"><h3>🔥 Calentamiento silencioso</h3><ul class="ticks">${CALENT_SILENCIOSO.map((x) => `<li>${x}</li>`).join('')}</ul><p class="small muted">Sin saltos ni trote: igual sube la temperatura y prepara las articulaciones.</p></div>`;
   }
   if (it.k === 'tandafin') {
-    return lg?.tandaA
+    return extraCtaHTML(lg, 1) + (lg?.tandaA
       ? '<p class="small center muted">✓ Tanda de la mañana lista. Te esperamos en la tarde.</p>'
-      : '<button class="btn wide" data-act="tandaok">✓ Terminé la tanda de la mañana</button>';
+      : '<button class="btn wide" data-act="tandaok">✓ Terminé la tanda de la mañana</button>');
   }
   return '';
 }

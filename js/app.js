@@ -796,7 +796,7 @@ function vSesion(date, sid) {
   const lg = getLog(date, sid, false);
   const items0 = itemsDe(sid, wi, date);
   // sesión dividida: mañana silenciosa + tarde
-  const items = tandasActivas(lg) && !lg?.done ? dividirTandas(items0, minManana(lg), modoTandas(lg)) : items0;
+  const items = conExtras(tandasActivas(lg) && !lg?.done ? dividirTandas(items0, minManana(lg), modoTandas(lg)) : items0, lg);
   const fz = fcZonas();
   const aj = getRutina(sid) ? { msgs: [], factor: 1, zonaFactor: {} } : ajusteSesion(date, sid);
   const desc = wi.deload || !!(S.descargas || {})[wi.week];
@@ -880,8 +880,8 @@ function vSesion(date, sid) {
       }
       html += `<div class="card blk ex ${allOk ? 'done' : ''} ${it.circ ? 'incirc' : ''}" data-exc="${it.id}" data-sets="${it.sets}" data-blk="${it.idx}">
         <div class="blk-h"><div class="thumb" data-act="tech" data-id="${it.id}">${Fig.still(ANIMS[it.id], 1, musculosDe(it.id)) || '<div class="noanim">🏋️</div>'}</div>
-          <div class="grow"><h3>${esc(ex.nombre)}</h3><p class="rx">${it.circ ? `${it.sets} rondas × ${it.reps}` : `${it.sets} × ${it.reps}${ex.porLado ? ' por lado' : ''} · descanso ${it.rest} s`}${it.enf ? ` <span class="tag-enf" title="Ajuste de volumen">🎯 ${it.enf === 'nuevo' ? 'extra' : it.enf}</span>` : ''}</p>
-          <div class="exlinks"><button class="link" data-act="tech" data-id="${it.id}">▶ Ver técnica</button><button class="link" data-act="subopen" data-id="${it.id}" data-orig="${it.orig || it.id}">↔ Cambiar</button></div>
+          <div class="grow"><h3>${esc(ex.nombre)}</h3><p class="rx">${it.circ ? `${it.sets} rondas × ${it.reps}` : `${it.sets} × ${it.reps}${ex.porLado ? ' por lado' : ''} · descanso ${it.rest} s`}${it.enf ? ` <span class="tag-enf" title="Ajuste de volumen">🎯 ${it.enf === 'nuevo' ? 'extra' : it.enf}</span>` : ''}${it.extra ? ' <span class="tag-enf tag-extra">💪 extra de hoy</span>' : ''}</p>
+          <div class="exlinks"><button class="link" data-act="tech" data-id="${it.id}">▶ Ver técnica</button>${it.extra ? (lg?.ex?.[it.id]?.sets || []).some((s) => s.ok) ? '' : `<button class="link danger" data-act="extraquitar" data-id="${it.id}">✕ Quitar</button>` : `<button class="link" data-act="subopen" data-id="${it.id}" data-orig="${it.orig || it.id}">↔ Cambiar</button>`}</div>
           ${pesoOpcHTML(it.id)}
           ${it.autoDolor ? `<p class="small muted">🔴 En lugar de ${esc(getEj(it.orig).nombre)}, por tu molestia de ${ZONAS[it.autoDolor].toLowerCase()}.</p>`
             : it.orig ? `<p class="small muted">En lugar de ${esc(getEj(it.orig).nombre)} · <button class="link small" data-act="subundo" data-orig="${it.orig}">volver al original</button></p>` : ''}
@@ -896,6 +896,7 @@ function vSesion(date, sid) {
       </div>`;
     }
   }
+  if (items.some((x) => x.k === 'ex')) html += extraCtaHTML(lg, tandasActivas(lg) && !lg?.done ? 2 : 0);
   if (items.some((x) => x.k === 'ex')) html += `<div class="card blk calma"><h3>🧘 Vuelta a la calma · 3-5 min</h3><ul class="ticks">${VUELTA_CALMA.map((x) => `<li>${x}</li>`).join('')}</ul><p class="small muted">Estira suave, sin rebotes y sin dolor.${zonasUsuario().includes('rodillas') ? ' Evita los estiramientos de cuádriceps de rodillas en el suelo.' : ''}</p></div>`;
   const rpeTxt = ['', 'Muy fácil', 'Fácil', 'Fácil', 'Moderado', 'Moderado', 'Algo duro', 'Duro', 'Muy duro', 'Durísimo', 'Máximo'];
   html += `<div class="card fin">
@@ -2312,7 +2313,7 @@ function vMas() {
     ${ayudaHTML('')}
     <div class="card small-card"><h3>ℹ️ Importante</h3><p class="small">Esta app orienta y educa con criterios de entrenamiento, nutrición y kinesiología basados en evidencia, pero <b>no reemplaza la evaluación de un médico, nutricionista, kinesiólogo o psicólogo</b>. Ante dudas sobre tu salud, consulta a un profesional.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">Athlos v1.34 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">Athlos v1.35 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 
