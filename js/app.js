@@ -712,7 +712,7 @@ function vHoy() {
     main = `<div class="card today ${st}">
       <div class="tag">${st === 'done' ? '✓ Completada' : st === 'prog' ? 'En curso' : 'Hoy toca'}</div>
       <h2>${ses.nombre}</h2><p class="muted">${ses.foco} · ≈ ${duracionEstimada(itemsDe(sid, wi, t))} min</p>
-      <a class="btn primary big" href="#/sesion/${t}/${sid}">${st === 'done' ? 'Ver sesión' : st === 'prog' ? 'Continuar' : 'Empezar entrenamiento'}</a>
+      <a class="btn primary big" href="#/sesion/${t}/${sid}">${st === 'done' ? 'Ver sesión' : st === 'prog' ? (lg?.tandaA ? '🌙 Hacer la tanda de la tarde' : 'Continuar') : tandasActivas(lg) ? '☀️ Empezar tanda de la mañana' : 'Empezar entrenamiento'}</a>
     </div>`;
   } else {
     let prox = null;
@@ -793,12 +793,14 @@ function vSesion(date, sid) {
   const ses = getSes(sid);
   if (!ses) return vHoy();
   const wi = weekInfo(date);
-  const items = itemsDe(sid, wi, date);
   const lg = getLog(date, sid, false);
+  const items0 = itemsDe(sid, wi, date);
+  // sesión dividida: mañana silenciosa + tarde
+  const items = tandasActivas(lg) && !lg?.done ? dividirTandas(items0, minManana(lg)) : items0;
   const fz = fcZonas();
   const aj = getRutina(sid) ? { msgs: [], factor: 1, zonaFactor: {} } : ajusteSesion(date, sid);
   const desc = wi.deload || !!(S.descargas || {})[wi.week];
-  const durEst = duracionEstimada(items), durMax = S.perfil?.dur || 45;
+  const durEst = duracionEstimada(items0), durMax = S.perfil?.dur || 45;
   const autoDolor = items.some((x) => x.autoDolor);
   const bandera = banderaActiva();
   ctx.items = items;
@@ -809,12 +811,14 @@ function vSesion(date, sid) {
     ${autoDolor ? `<div class="hint">Si hoy te sientes bien, puedes <button class="link" data-act="dolorok">usar los ejercicios originales</button>.</div>` : ''}
     ${aj.sugDescarga ? `<div class="hint warn">Hay señales de fatiga acumulada (esfuerzo alto, poco sueño o dolor en alza). Una semana de descarga ayuda a recuperar y seguir progresando. <button class="link" data-act="descarga" data-w="${wi.week}">Activar descarga esta semana</button></div>` : ''}
     ${S.perfil?.precaucion ? '<div class="hint warn">🩺 Modo precaución (cuestionario de salud): los intervalos intensos se cambian por cardio suave y el circuito tiene pausas más largas. Consulta a tu médico.</div>' : ''}
-    ${!getRutina(sid) && durEst > durMax + 10 && !lg?.expres && !lg?.done ? `<div class="hint warn">⏱ Esta sesión puede durar ~${durEst} min y tú tienes ${durMax}. <button class="link" data-act="expres">Modo exprés</button>: 1 serie menos por ejercicio y la mitad del cardio final (completa el resto con una caminata otro día).</div>` : ''}
+    ${!getRutina(sid) && durEst > durMax + 10 && !lg?.expres && !lg?.done && !tandasActivas(lg) ? `<div class="hint warn">⏱ Esta sesión puede durar ~${durEst} min y tú tienes ${durMax}. <button class="link" data-act="expres">Modo exprés</button>: 1 serie menos por ejercicio y la mitad del cardio final (completa el resto con una caminata otro día).</div>` : ''}
     ${lg?.expres ? '<div class="hint">⏱ Modo exprés activo. <button class="link" data-act="expres">Volver a la sesión completa</button></div>' : ''}
+    ${tandasCtrlHTML(lg, durEst)}
     <div class="hint">Toca <b>✓</b> al terminar cada serie: se guarda y parte el descanso. Si dejas el peso/reps vacíos se usan los sugeridos. En los ejercicios de tiempo usa <b>⏱</b> para cronometrar cuánto resistes. Meta de esfuerzo: termina cada serie con <b>${wi.phase === 1 ? '2-3' : '1-2'} repeticiones en reserva</b>. Ritmo: <b>${TEMPO[wi.phase]}</b>.</div>`;
 
   items.forEach((it, idx) => { it.idx = idx; });
   for (const it of items) {
+    if (it.k === 'tanda' || it.k === 'warmq' || it.k === 'tandafin') { html += tandaItemHTML(it, lg); continue; }
     if (it.k === 'warm') {
       const list = CALENTAMIENTO[it.corto ? 'corto' : 'normal'].map((x) => x.replace('cardio', PLAN().cardio.label.toLowerCase()));
       // series de aproximación antes del primer ejercicio con peso
@@ -2307,7 +2311,7 @@ function vMas() {
     ${ayudaHTML('')}
     <div class="card small-card"><h3>ℹ️ Importante</h3><p class="small">Esta app orienta y educa con criterios de entrenamiento, nutrición y kinesiología basados en evidencia, pero <b>no reemplaza la evaluación de un médico, nutricionista, kinesiólogo o psicólogo</b>. Ante dudas sobre tu salud, consulta a un profesional.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">Athlos v1.31 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">Athlos v1.32 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 
@@ -2439,7 +2443,7 @@ function setData(el) {
 /* ---- Progreso de la sesión ---- */
 function estadoItems() {
   const lg = getLog(ctx.date, ctx.sid);
-  return (ctx.items || []).filter((it) => it.k !== 'circ').map((it) => {
+  return (ctx.items || []).filter((it) => !['circ', 'tanda', 'warmq', 'tandafin'].includes(it.k)).map((it) => {
     let estado = 'pend', hechas = 0, total = 0, nombre;
     if (it.k === 'warm') { nombre = 'Calentamiento'; if (lg?.warm) estado = 'ok'; }
     else if (it.k === 'cardio') { nombre = it.rx.titulo.split(' · ')[0]; if (lg?.cardio?.[it.key]?.ok) estado = 'ok'; }
@@ -3402,6 +3406,7 @@ function init() {
   main.addEventListener('change', (e) => {
     const el = e.target;
     if (el.dataset.actChange === 'ejsel') { ejSel = el.value; rerender(); }
+    if (el.dataset.actChange === 'tandasiempre') { const lg = getLog(ctx.date, ctx.sid, true); S.ajustes = { ...(S.ajustes || {}), tandas: { ...tandasCfg(), on: el.checked, min: minManana(lg) } }; lg.tandas = true; save(true); toast(el.checked ? '🌓 Tus sesiones se dividirán en 2 tandas' : 'Las próximas sesiones serán de una sola tanda'); }
     if (el.dataset.actChange === 'planfav') { S.ajustes = { ...(S.ajustes || {}), planFav: el.checked }; save(true); openModal('🧭 Un día de ejemplo', planHTML()); }
     if (el.dataset.bandera) {
       const lg = getLog(ctx.date, ctx.sid, true), id = el.dataset.bandera;

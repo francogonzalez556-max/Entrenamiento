@@ -328,7 +328,8 @@ function cardioSemanaHTML(wi) {
 }
 
 /* ---------- Duración estimada de una sesión ---------- */
-function duracionEstimada(items) {
+function duracionEstimada(items) { return Math.round(segundosEstimados(items) / 60 / 5) * 5; }
+function segundosEstimados(items) {
   let s = 0;
   for (const it of items) {
     if (it.k === 'warm') s += it.corto ? 180 : 360;
@@ -340,7 +341,7 @@ function duracionEstimada(items) {
       s += it.sets * trab + Math.max(0, it.sets - 1) * (it.rest || 60) * (it.ss ? 0.5 : 1) + 75;
     }
   }
-  return Math.round(s / 60 / 5) * 5;
+  return s;
 }
 
 /* ---------- Alerta de volumen semanal del plan (siempre visible) ---------- */
