@@ -285,3 +285,9 @@ body { padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
 .tanda-h.lista { opacity: .75; }
 .tanda-ok { color: var(--acc-t); font-size: 1.4rem; font-weight: 800; }
 .tandas-cfg .chips { margin: 8px 0; }
+
+/* ---- v1.33: estrella en alimentos anotados y recientes ---- */
+.favmini { background: none; border: 0; color: var(--mut); font-size: 1.25rem; line-height: 1; padding: 6px 8px; cursor: pointer; flex: none; }
+.favmini.on { color: #f5c518; }
+.fres-row { display: flex; align-items: stretch; gap: 4px; }
+.fres-row .fres-i { flex: 1; min-width: 0; }

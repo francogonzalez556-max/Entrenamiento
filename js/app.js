@@ -1230,12 +1230,13 @@ function multiBtnHTML(q) {
   return `<button class="btn primary wide multi" data-act="multitxt">🍽️ ${sheet.rec ? 'Agregar como ingredientes' : 'Agregar todo junto'} (${partes.length}): ${partes.map(esc).join(' · ')}</button>`;
 }
 const foodBtn = (a) => `<button class="fres-i" data-act="pickfood" data-id="${esc(a.id)}"><b>${esc(a.n)}</b><span>${esc(a.p)} · ${a.k} kcal · ${a.pr} g prot.</span></button>`;
+const foodFavRow = (a) => `<div class="fres-row">${foodBtn(a)}${a.rec ? '' : `<button class="favmini ${esFav(a) ? 'on' : ''}" data-act="favres" data-n="${esc(a.n)}" aria-label="${esFav(a) ? 'Quitar de favoritos' : 'Marcar como favorito'}" aria-pressed="${esFav(a)}">${esFav(a) ? '★' : '☆'}</button>`}</div>`;
 function resultadosHTML(q) {
   const r = buscar(q), multi = multiBtnHTML(q);
   if (r) return multi + (r.length ? r.map(foodBtn).join('') : multi ? '' : `<p class="muted small">No encontré "${esc(q)}". Prueba con otra palabra o créalo abajo.</p>`);
   const favs = S.favAlim || [], rec = recientes().filter((a) => !favs.some((x) => x.n === a.n));
-  let h = favs.length ? `<p class="fres-h">⭐ Favoritos</p>${favs.map(foodBtn).join('')}` : '';
-  h += rec.length ? `<p class="fres-h">Recientes</p>${rec.map(foodBtn).join('')}` : '';
+  let h = favs.length ? `<p class="fres-h">⭐ Favoritos</p>${favs.map(foodFavRow).join('')}` : '';
+  h += rec.length ? `<p class="fres-h">Recientes <span class="small muted">· toca ☆ para guardarlo en favoritos</span></p>${rec.map(foodFavRow).join('')}` : '';
   const preps = S.propios.filter((a) => a.rec), mios = S.propios.filter((a) => !a.rec);
   if (preps.length) h += `<p class="fres-h">Mis preparaciones</p>${preps.map(foodBtn).join('')}`;
   if (mios.length) h += `<p class="fres-h">Mis alimentos</p>${mios.map(foodBtn).join('')}`;
@@ -1705,7 +1706,7 @@ function vComida() {
     const its = items.filter((x) => x.m === m), tt = totales(its);
     const prev = diaComidas(ayer).filter((x) => x.m === m);
     return `<div class="card meal-c"><div class="mh"><h3>${ico} ${nom}</h3><b>${oc ? `${Math.round(tt.pr)} g prot.` : `${Math.round(tt.k)} kcal`}</b></div>
-      ${its.map((x) => `<div class="fi"><div class="grow tap" data-act="editfood" data-id="${x.id}"><b>${x.gr ? '' : fmtQ(x.q)}${esc(x.f.n)}</b><span class="small muted">${x.gr ? `${fmtN(x.gr)} ${x.f.u || 'g'}` : esc(x.f.p)} · ${Math.round(x.f.pr * x.q)} g prot.</span></div><span>${oc ? '' : Math.round(x.f.k * x.q)}</span><button class="link danger" data-act="delfood" data-id="${x.id}" aria-label="Quitar">✕</button></div>`).join('')}
+      ${its.map((x) => `<div class="fi"><div class="grow tap" data-act="editfood" data-id="${x.id}"><b>${x.gr ? '' : fmtQ(x.q)}${esc(x.f.n)}</b><span class="small muted">${x.gr ? `${fmtN(x.gr)} ${x.f.u || 'g'}` : esc(x.f.p)} · ${Math.round(x.f.pr * x.q)} g prot.</span></div><span>${oc ? '' : Math.round(x.f.k * x.q)}</span>${x.f.rec ? '' : `<button class="favmini ${esFav(x.f) ? 'on' : ''}" data-act="favitem" data-id="${x.id}" aria-label="${esFav(x.f) ? 'Quitar de favoritos' : 'Marcar como favorito'}" aria-pressed="${esFav(x.f)}">${esFav(x.f) ? '★' : '☆'}</button>`}<button class="link danger" data-act="delfood" data-id="${x.id}" aria-label="Quitar">✕</button></div>`).join('')}
       <div class="btns"><button class="btn small-btn" data-act="opensheet" data-m="${m}">+ Agregar</button>${!its.length && prev.length ? `<button class="btn ghost small-btn" data-act="repetir" data-m="${m}">↺ Repetir de ayer${oc ? '' : ` (${Math.round(totales(prev).k)} kcal)`}</button>` : ''}${combosChipsHTML(m, its, oc)}</div></div>`;
   }).join('');
   const labs = [], vals = [];
@@ -2311,7 +2312,7 @@ function vMas() {
     ${ayudaHTML('')}
     <div class="card small-card"><h3>ℹ️ Importante</h3><p class="small">Esta app orienta y educa con criterios de entrenamiento, nutrición y kinesiología basados en evidencia, pero <b>no reemplaza la evaluación de un médico, nutricionista, kinesiólogo o psicólogo</b>. Ante dudas sobre tu salud, consulta a un profesional.</p></div>
     <button class="btn danger ghost" data-act="reset">Borrar todos los datos</button>
-    <p class="small muted center">Athlos v1.32 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
+    <p class="small muted center">Athlos v1.33 · Plan de 12 semanas${S.ultimoRespaldo ? ` · último respaldo: ${fmt(S.ultimoRespaldo)}` : ''}</p>
   </section>`;
 }
 

@@ -228,6 +228,21 @@ Object.assign(actions, {
     toast(esFav(sheet.food) ? '⭐ Agregado a favoritos' : 'Quitado de favoritos');
     renderSheet();
   },
+  favitem(btn) {
+    const it = diaComidas(comidaDia).find((x) => x.id === btn.dataset.id);
+    if (!it) return;
+    favToggle(it.f);
+    toast(esFav(it.f) ? `⭐ ${it.f.n} en favoritos` : 'Quitado de favoritos');
+    rerender();
+  },
+  favres(btn) {
+    const n = btn.dataset.n;
+    const f = favAlim().find((x) => x.n === n) || recientes().find((x) => x.n === n) || todosAlimentos().find((x) => x.n === n);
+    if (!f) return;
+    favToggle(f);
+    toast(esFav(f) ? `⭐ ${f.n} en favoritos` : 'Quitado de favoritos');
+    const box = $('#fres'); if (box) box.innerHTML = resultadosHTML(sheet.q_);
+  },
   favquitar(btn) { S.favAlim = favAlim().filter((x) => x.n !== btn.dataset.n); save(true); rerender(); },
   planabrir() { openModal('🧭 Un día de ejemplo', planHTML()); },
   planotro() { planSeed++; openModal('🧭 Un día de ejemplo', planHTML()); },
